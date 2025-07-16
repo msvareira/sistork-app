@@ -16,11 +16,17 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
+        $middleware->web(append: [
+            \App\Http\Middleware\Cors::class,
+        ]);
+
+        $middleware->api(append: [
+            \App\Http\Middleware\Cors::class,
+        ]);
+
         $middleware->alias([
             'cors' => \App\Http\Middleware\Cors::class,
         ]);
-
-        $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
