@@ -1,4 +1,23 @@
 ﻿services:
+  # 🤖 Ollama AI Service - Local LLM Server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sistork-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - sistork-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.0
     container_name: sistork-mysql
@@ -78,6 +97,7 @@
 
 volumes:
   mysql_data:
+  ollama_data:
 
 networks:
   sistork-network:

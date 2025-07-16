@@ -89,6 +89,37 @@ class ApiClient {
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  // Métodos públicos para acesso controlado
+  getBaseURL(): string {
+    return this.baseURL;
+  }
+
+  // Método especial para upload de arquivos
+  async uploadFiles<T>(endpoint: string, formData: FormData): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+    };
+
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

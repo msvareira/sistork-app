@@ -17,9 +17,12 @@ import {
   CheckCircle,
   PlayCircle,
   XCircle,
-  DollarSign as PaidIcon
+  DollarSign as PaidIcon,
+  Brain
 } from 'lucide-react';
 import { LoadingButton, LoadingCard } from './LoadingComponents';
+import AIAssistant from './AIAssistant';
+import { DiagnosticSuggestion } from '../services/aiService';
 
 export default function QuoteManagement() {
   const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, loadingStates, createAppointmentFromQuote } = useData();
@@ -27,6 +30,7 @@ export default function QuoteManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [schedulingQuote, setSchedulingQuote] = useState<Quote | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -325,18 +329,63 @@ export default function QuoteManagement() {
     setScheduleFormData({ date: '', time: '', notes: '' });
   };
 
+  const handleAISuggestions = (suggestion: DiagnosticSuggestion) => {
+    // Aplicar peças sugeridas pela IA
+    const aiParts: QuotePart[] = suggestion.suggestedParts
+      .map(suggestedPart => {
+        const existingPart = parts.find(p => p.name.toLowerCase().includes(suggestedPart.name.toLowerCase()));
+        if (existingPart) {
+          return {
+            partId: existingPart.id,
+            quantity: 1,
+            unitPrice: existingPart.sellPrice,
+            total: existingPart.sellPrice
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as QuotePart[];
+
+    // Aplicar serviços sugeridos pela IA
+    const aiServices: QuoteService[] = suggestion.suggestedServices.map(suggestedService => ({
+      description: suggestedService.description,
+      quantity: 1,
+      unitPrice: suggestedService.estimatedPrice,
+      total: suggestedService.estimatedPrice
+    }));
+
+    // Atualizar o formulário com as sugestões
+    setFormData(prev => ({
+      ...prev,
+      parts: [...prev.parts, ...aiParts],
+      services: aiServices.length > 0 ? aiServices : prev.services
+    }));
+
+    success('IA aplicada', `${aiParts.length} peças e ${aiServices.length} serviços sugeridos pela IA foram aplicados.`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Orçamentos</h1>
-        <LoadingButton
-          loading={loadingStates.operations}
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Orçamento
-        </LoadingButton>
+        <div className="flex gap-3">
+          <LoadingButton
+            loading={loadingStates.operations}
+            onClick={() => setShowAIAssistant(true)}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
+          >
+            <Brain className="w-4 h-4" />
+            Assistente IA
+          </LoadingButton>
+          <LoadingButton
+            loading={loadingStates.operations}
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Orçamento
+          </LoadingButton>
+        </div>
       </div>
 
       {/* Loading state for data fetching */}
@@ -903,8 +952,17 @@ export default function QuoteManagement() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+        </div>        )}
+
+      {/* AI Assistant Modal */}
+      <AIAssistant
+        isOpen={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        onApplySuggestions={(suggestion) => {
+          handleAISuggestions(suggestion);
+          setShowForm(true); // Abrir formulário após aplicar sugestões
+        }}
+      />
 
       </>
     )}

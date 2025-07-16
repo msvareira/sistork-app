@@ -8,6 +8,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\PartController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\AIController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,6 +39,11 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Special routes
     Route::post('/appointments/from-quote', [AppointmentController::class, 'createFromQuote']);
+    
+    // AI routes - Ollama Local Real AI
+    Route::post('/ai/analyze-problem', [AIController::class, 'analyzeProblem']);
+    Route::post('/ai/diagnostic-with-images', [AIController::class, 'diagnosticWithImages']);
+    Route::get('/ai/health-check', [AIController::class, 'healthCheck']);
 });
 
 // Health check route
@@ -48,3 +54,6 @@ Route::get('/health', function () {
         'version' => '1.0.0'
     ]);
 });
+
+// Test AI route (temporary - no auth required)
+Route::post('/test-ai', [AIController::class, 'testAI']);
