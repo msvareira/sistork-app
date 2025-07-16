@@ -4,6 +4,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ClientController;
+use App\Http\Controllers\PartController;
+use App\Http\Controllers\QuoteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,6 +28,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/user', [AuthController::class, 'user']);
     Route::get('/users', [UserController::class, 'index']);
+    
+    // Resource routes
+    Route::apiResource('clients', ClientController::class);
+    Route::apiResource('parts', PartController::class);
+    Route::apiResource('quotes', QuoteController::class);
 });
 
 // Health check route
