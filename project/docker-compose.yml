@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sistork-frontend-react
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8044/api
+      - VITE_APP_URL=http://localhost:8044
+      - VITE_APP_NAME=SisTork
+    networks:
+      - sistork-network
+    restart: unless-stopped
+
+networks:
+  sistork-network:
+    name: back_laravel-development
+    external: true

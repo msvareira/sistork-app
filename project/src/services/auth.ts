@@ -43,11 +43,15 @@ export class AuthService {
   }
 
   isAuthenticated(): boolean {
-    return !!apiClient.getToken();
+    return !!this.getToken();
   }
 
   getToken(): string | null {
     return apiClient.getToken();
+  }
+
+  clearToken(): void {
+    apiClient.clearToken();
   }
 }
 

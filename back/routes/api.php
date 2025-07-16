@@ -7,6 +7,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\PartController;
 use App\Http\Controllers\QuoteController;
+use App\Http\Controllers\AppointmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,6 +34,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('clients', ClientController::class);
     Route::apiResource('parts', PartController::class);
     Route::apiResource('quotes', QuoteController::class);
+    Route::apiResource('appointments', AppointmentController::class);
+    
+    // Special routes
+    Route::post('/appointments/from-quote', [AppointmentController::class, 'createFromQuote']);
 });
 
 // Health check route

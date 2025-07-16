@@ -99,6 +99,9 @@ export const quoteService = {
       notes: apiQuote.notes,
       expiresAt: new Date(apiQuote.expiresAt || apiQuote.expires_at),
       status: apiQuote.status,
+      scheduledDate: apiQuote.scheduledDate || apiQuote.scheduled_date,
+      scheduledTime: apiQuote.scheduledTime || apiQuote.scheduled_time,
+      scheduleNotes: apiQuote.scheduleNotes || apiQuote.schedule_notes,
       createdAt: new Date(apiQuote.createdAt || apiQuote.created_at)
     };
   },

@@ -1,0 +1,125 @@
+version: '3.8'
+
+# Docker Compose para o Sistema Completo SisTork
+# Este arquivo permite gerenciar backend e frontend juntos
+
+services:
+  # ========================================
+  # BACKEND SERVICES (Laravel + MySQL + Redis)
+  # ========================================
+  
+  sistork-nginx:
+    image: nginx:latest
+    container_name: sistork-backend-nginx
+    volumes:
+      - ./back:/var/www
+      - ./back/docker/development/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8044:80"
+    environment:
+      - NGINX_HOST=localhost
+    networks:
+      - sistork-network
+    depends_on:
+      - sistork-php-fpm
+
+  sistork-php-fpm:
+    build:
+      context: ./back
+      dockerfile: ./docker/common/php-fpm/Dockerfile
+      target: development
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        XDEBUG_ENABLED: ${XDEBUG_ENABLED:-true}
+        XDEBUG_MODE: develop,coverage,debug,profile
+        XDEBUG_HOST: ${XDEBUG_HOST:-host.docker.internal}
+        XDEBUG_IDE_KEY: ${XDEBUG_IDE_KEY:-DOCKER}
+        XDEBUG_LOG: /dev/stdout
+        XDEBUG_LOG_LEVEL: 0
+    container_name: sistork-backend-php
+    env_file:
+      - ./back/.env
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./back:/var/www
+    networks:
+      - sistork-network
+    depends_on:
+      - sistork-mysql
+
+  sistork-workspace:
+    build:
+      context: ./back
+      dockerfile: ./docker/development/workspace/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        XDEBUG_ENABLED: ${XDEBUG_ENABLED:-true}
+        XDEBUG_MODE: develop,coverage,debug,profile
+        XDEBUG_HOST: ${XDEBUG_HOST:-host.docker.internal}
+        XDEBUG_IDE_KEY: ${XDEBUG_IDE_KEY:-DOCKER}
+        XDEBUG_LOG: /dev/stdout
+        XDEBUG_LOG_LEVEL: 0
+    container_name: sistork-backend-workspace
+    tty: true
+    stdin_open: true
+    env_file:
+      - ./back/.env
+    volumes:
+      - ./back:/var/www
+    networks:
+      - sistork-network
+
+  sistork-mysql:
+    image: mysql:8.0
+    container_name: sistork-backend-mysql
+    ports:
+      - "3344:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=sistork_db
+      - MYSQL_USER=laravel
+      - MYSQL_PASSWORD=secret
+    volumes:
+      - sistork-mysql-data:/var/lib/mysql
+    networks:
+      - sistork-network
+    command: --default-authentication-plugin=mysql_native_password
+
+  sistork-redis:
+    image: redis:alpine
+    container_name: sistork-backend-redis
+    networks:
+      - sistork-network
+
+  # ========================================
+  # FRONTEND SERVICE (React + Vite)
+  # ========================================
+  
+  sistork-frontend:
+    build:
+      context: ./project
+      dockerfile: Dockerfile
+    container_name: sistork-frontend-react
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./project:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8044/api
+      - VITE_APP_URL=http://localhost:8044
+      - VITE_APP_NAME=SisTork
+    networks:
+      - sistork-network
+    depends_on:
+      - sistork-nginx
+    restart: unless-stopped
+
+networks:
+  sistork-network:
+    driver: bridge
+
+volumes:
+  sistork-mysql-data:

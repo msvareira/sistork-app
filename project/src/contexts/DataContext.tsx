@@ -3,6 +3,7 @@ import { Client, Part, Quote, Appointment, Sale } from '../types';
 import { clientService } from '../services/clientService';
 import { partService } from '../services/partService';
 import { quoteService } from '../services/quoteService';
+import { appointmentService } from '../services/appointmentService';
 import { useAuth } from './AuthContext';
 
 interface DataContextType {
@@ -16,6 +17,7 @@ interface DataContextType {
     clients: boolean;
     parts: boolean;
     quotes: boolean;
+    appointments: boolean;
     operations: boolean;
   };
   error: string | null;
@@ -31,16 +33,18 @@ interface DataContextType {
   addQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => Promise<void>;
   updateQuote: (id: string, quote: Partial<Quote>) => Promise<void>;
   deleteQuote: (id: string) => Promise<void>;
-  // Appointment methods (placeholder for now)
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt'>) => void;
-  updateAppointment: (id: string, appointment: Partial<Appointment>) => void;
-  deleteAppointment: (id: string) => void;
+  // Appointment methods
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt'>) => Promise<void>;
+  updateAppointment: (id: string, appointment: Partial<Appointment>) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
+  createAppointmentFromQuote: (data: { quote_id: string; date: string; time: string; notes?: string }) => Promise<void>;
   // Sale methods (placeholder for now)
   addSale: (sale: Omit<Sale, 'id' | 'createdAt'>) => void;
   // Refresh methods
   refreshClients: () => Promise<void>;
   refreshParts: () => Promise<void>;
   refreshQuotes: () => Promise<void>;
+  refreshAppointments: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -64,6 +68,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     clients: false,
     parts: false,
     quotes: false,
+    appointments: false,
     operations: false,
   });
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +90,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await Promise.all([
         refreshClients(),
         refreshParts(),
-        refreshQuotes()
+        refreshQuotes(),
+        refreshAppointments()
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -258,23 +264,80 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addAppointment = (appointmentData: Omit<Appointment, 'id' | 'createdAt'>) => {
-    const newAppointment: Appointment = {
-      ...appointmentData,
-      id: Date.now().toString(),
-      createdAt: new Date()
-    };
-    setAppointments(prev => [...prev, newAppointment]);
+  // Appointment methods
+  const refreshAppointments = async () => {
+    if (!isAuthenticated) return;
+    
+    setLoadingStates(prev => ({ ...prev, appointments: true }));
+    try {
+      const appointmentsData = await appointmentService.getAll();
+      setAppointments(appointmentsData);
+    } catch (err) {
+      console.error('Error loading appointments:', err);
+      setError('Failed to load appointments');
+    } finally {
+      setLoadingStates(prev => ({ ...prev, appointments: false }));
+    }
   };
 
-  const updateAppointment = (id: string, appointmentData: Partial<Appointment>) => {
-    setAppointments(prev => prev.map(appointment => 
-      appointment.id === id ? { ...appointment, ...appointmentData } : appointment
-    ));
+  const addAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt'>) => {
+    setLoadingStates(prev => ({ ...prev, operations: true }));
+    try {
+      const newAppointment = await appointmentService.create(appointmentData);
+      setAppointments(prev => [...prev, newAppointment]);
+    } catch (err) {
+      console.error('Error creating appointment:', err);
+      setError('Failed to create appointment');
+      throw err;
+    } finally {
+      setLoadingStates(prev => ({ ...prev, operations: false }));
+    }
   };
 
-  const deleteAppointment = (id: string) => {
-    setAppointments(prev => prev.filter(appointment => appointment.id !== id));
+  const updateAppointment = async (id: string, appointmentData: Partial<Appointment>) => {
+    setLoadingStates(prev => ({ ...prev, operations: true }));
+    try {
+      const updatedAppointment = await appointmentService.update(id, appointmentData);
+      setAppointments(prev => prev.map(appointment => 
+        appointment.id === id ? updatedAppointment : appointment
+      ));
+    } catch (err) {
+      console.error('Error updating appointment:', err);
+      setError('Failed to update appointment');
+      throw err;
+    } finally {
+      setLoadingStates(prev => ({ ...prev, operations: false }));
+    }
+  };
+
+  const deleteAppointment = async (id: string) => {
+    setLoadingStates(prev => ({ ...prev, operations: true }));
+    try {
+      await appointmentService.delete(id);
+      setAppointments(prev => prev.filter(appointment => appointment.id !== id));
+    } catch (err) {
+      console.error('Error deleting appointment:', err);
+      setError('Failed to delete appointment');
+      throw err;
+    } finally {
+      setLoadingStates(prev => ({ ...prev, operations: false }));
+    }
+  };
+
+  const createAppointmentFromQuote = async (data: { quote_id: string; date: string; time: string; notes?: string }) => {
+    setLoadingStates(prev => ({ ...prev, operations: true }));
+    try {
+      const newAppointment = await appointmentService.createFromQuote(data);
+      setAppointments(prev => [...prev, newAppointment]);
+      // Refresh quotes to get updated schedule info
+      await refreshQuotes();
+    } catch (err) {
+      console.error('Error creating appointment from quote:', err);
+      setError('Failed to create appointment from quote');
+      throw err;
+    } finally {
+      setLoadingStates(prev => ({ ...prev, operations: false }));
+    }
   };
 
   const addSale = (saleData: Omit<Sale, 'id' | 'createdAt'>) => {
@@ -312,12 +375,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addAppointment,
       updateAppointment,
       deleteAppointment,
+      createAppointmentFromQuote,
       // Sale methods
       addSale,
       // Refresh methods
       refreshClients,
       refreshParts,
       refreshQuotes,
+      refreshAppointments,
     }}>
       {children}
     </DataContext.Provider>

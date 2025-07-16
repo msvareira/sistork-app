@@ -151,7 +151,7 @@ export default function Dashboard() {
       )}
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Orçamentos Recentes</h3>
           <div className="space-y-3">
@@ -171,6 +171,43 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Orçamentos Agendados</h3>
+          <div className="space-y-3">
+            {quotes
+              .filter(quote => quote.scheduledDate)
+              .sort((a, b) => {
+                const dateA = new Date(`${a.scheduledDate} ${a.scheduledTime}`);
+                const dateB = new Date(`${b.scheduledDate} ${b.scheduledTime}`);
+                return dateA.getTime() - dateB.getTime();
+              })
+              .slice(0, 5)
+              .map((quote) => {
+                const client = clients.find(c => c.id === quote.clientId);
+                
+                return (
+                  <div key={quote.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">#{quote.id} - {client?.name}</p>
+                      <p className="text-sm text-gray-500">Total: R$ {quote.total.toFixed(2)}</p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        {quote.scheduledDate} às {quote.scheduledTime}
+                      </p>
+                    </div>
+                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(quote.status)}`}>
+                      {getStatusLabel(quote.status)}
+                    </span>
+                  </div>
+                );
+              })}
+            {quotes.filter(quote => quote.scheduledDate).length === 0 && (
+              <p className="text-gray-500 text-center py-8">
+                Nenhum orçamento agendado
+              </p>
+            )}
           </div>
         </div>
 

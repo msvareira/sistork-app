@@ -60,6 +60,9 @@ class QuoteController extends Controller
                 'notes' => $quote->notes,
                 'expiresAt' => $quote->expires_at->format('c'),
                 'status' => $quote->status,
+                'scheduledDate' => $quote->scheduled_date?->format('Y-m-d'),
+                'scheduledTime' => $quote->scheduled_time?->format('H:i'),
+                'scheduleNotes' => $quote->schedule_notes,
                 'createdAt' => $quote->created_at->format('c'),
             ];
         }));
@@ -175,6 +178,9 @@ class QuoteController extends Controller
             'notes' => $quote->notes,
             'expiresAt' => $quote->expires_at->format('c'),
             'status' => $quote->status,
+            'scheduledDate' => $quote->scheduled_date?->format('Y-m-d'),
+            'scheduledTime' => $quote->scheduled_time?->format('H:i'),
+            'scheduleNotes' => $quote->schedule_notes,
             'createdAt' => $quote->created_at->format('c'),
         ]);
     }

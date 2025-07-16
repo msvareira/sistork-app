@@ -50,6 +50,9 @@ export interface Quote {
   createdAt: Date;
   expiresAt: Date;
   status: 'pending' | 'approved' | 'in_progress' | 'completed' | 'paid' | 'rejected' | 'expired';
+  scheduledDate?: string;
+  scheduledTime?: string;
+  scheduleNotes?: string;
 }
 
 export interface QuotePart {
@@ -71,6 +74,12 @@ export interface Appointment {
   id: string;
   clientId: string;
   client?: Client;
+  quoteId?: string;
+  quote?: {
+    id: string;
+    total: number;
+    status: string;
+  };
   service: string;
   date: Date;
   time: string;

@@ -22,11 +22,13 @@ import {
 import { LoadingButton, LoadingCard } from './LoadingComponents';
 
 export default function QuoteManagement() {
-  const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, loadingStates } = useData();
+  const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, loadingStates, createAppointmentFromQuote } = useData();
   const { success, error } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+  const [schedulingQuote, setSchedulingQuote] = useState<Quote | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -34,6 +36,12 @@ export default function QuoteManagement() {
     clientId: '',
     parts: [] as QuotePart[],
     services: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }] as QuoteService[],
+    notes: ''
+  });
+
+  const [scheduleFormData, setScheduleFormData] = useState({
+    date: '',
+    time: '',
     notes: ''
   });
 
@@ -279,6 +287,44 @@ export default function QuoteManagement() {
     window.open(url, '_blank');
   };
 
+  const handleSchedule = (quote: Quote) => {
+    setSchedulingQuote(quote);
+    setScheduleFormData({
+      date: quote.scheduledDate || '',
+      time: quote.scheduledTime || '',
+      notes: quote.scheduleNotes || ''
+    });
+    setShowScheduleForm(true);
+  };
+
+  const handleScheduleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!schedulingQuote) return;
+
+    try {
+      await createAppointmentFromQuote({
+        quote_id: schedulingQuote.id,
+        date: scheduleFormData.date,
+        time: scheduleFormData.time,
+        notes: scheduleFormData.notes
+      });
+      
+      success('Agendamento criado', 'O orçamento foi agendado com sucesso.');
+      setShowScheduleForm(false);
+      setSchedulingQuote(null);
+      setScheduleFormData({ date: '', time: '', notes: '' });
+    } catch (err) {
+      console.error('Error scheduling quote:', err);
+      error('Erro ao agendar', 'Não foi possível agendar o orçamento. Tente novamente.');
+    }
+  };
+
+  const resetScheduleForm = () => {
+    setShowScheduleForm(false);
+    setSchedulingQuote(null);
+    setScheduleFormData({ date: '', time: '', notes: '' });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -320,7 +366,7 @@ export default function QuoteManagement() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-60">Ações</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -359,8 +405,8 @@ export default function QuoteManagement() {
                         {getStatusLabel(quote.status)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium w-60">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         <button
                           onClick={() => handleEdit(quote)}
                           disabled={loadingStates.operations}
@@ -384,6 +430,14 @@ export default function QuoteManagement() {
                           title="Enviar WhatsApp"
                         >
                           <Share2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleSchedule(quote)}
+                          disabled={loadingStates.operations}
+                          className="text-purple-600 hover:text-purple-900 hover:bg-purple-50 p-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={quote.scheduledDate ? 'Reagendar' : 'Agendar'}
+                        >
+                          <Calendar className="w-4 h-4" />
                         </button>
                         
                         {/* Status Action Buttons */}
@@ -754,6 +808,97 @@ export default function QuoteManagement() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   {editingQuote ? 'Atualizar' : 'Criar'} Orçamento
+                </LoadingButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Modal */}
+      {showScheduleForm && schedulingQuote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">
+                {schedulingQuote.scheduledDate ? 'Reagendar' : 'Agendar'} Orçamento
+              </h2>
+              <button
+                onClick={resetScheduleForm}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">Cliente:</p>
+              <p className="font-medium">{schedulingQuote.client?.name}</p>
+              <p className="text-sm text-gray-600 mt-1">Total: R$ {calculateQuoteTotal(schedulingQuote).toFixed(2)}</p>
+              {schedulingQuote.scheduledDate && (
+                <p className="text-sm text-blue-600 mt-1">
+                  Agendado para: {schedulingQuote.scheduledDate} às {schedulingQuote.scheduledTime}
+                </p>
+              )}
+            </div>
+
+            <form onSubmit={handleScheduleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={scheduleFormData.date}
+                    onChange={(e) => setScheduleFormData({ ...scheduleFormData, date: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Horário *
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={scheduleFormData.time}
+                    onChange={(e) => setScheduleFormData({ ...scheduleFormData, time: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observações
+                </label>
+                <textarea
+                  value={scheduleFormData.notes}
+                  onChange={(e) => setScheduleFormData({ ...scheduleFormData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Observações sobre o agendamento..."
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={resetScheduleForm}
+                  disabled={loadingStates.operations}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <LoadingButton
+                  type="submit"
+                  loading={loadingStates.operations}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  {schedulingQuote.scheduledDate ? 'Reagendar' : 'Agendar'}
                 </LoadingButton>
               </div>
             </form>

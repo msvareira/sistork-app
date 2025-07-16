@@ -1,6 +1,7 @@
 services:
   web:
     image: nginx:latest # Using the default Nginx image with custom configuration.
+    container_name: sistork-backend-nginx
     volumes:
       # Mount the application code for live updates
       - ./:/var/www
@@ -19,6 +20,7 @@ services:
 
   php-fpm:
     # For the php-fpm service, we will use our common PHP-FPM Dockerfile with the development target
+    container_name: sistork-backend-php
     build:
       context: .
       dockerfile: ./docker/common/php-fpm/Dockerfile
@@ -47,6 +49,7 @@ services:
 
   workspace:
     # For the workspace service, we will also create a custom image to install and setup all the necessary stuff.
+    container_name: sistork-backend-workspace
     build:
       context: .
       dockerfile: ./docker/development/workspace/Dockerfile
@@ -70,6 +73,7 @@ services:
 
   mysql:
     image: mysql:8.0
+    container_name: sistork-backend-mysql
     ports:
       - "${MYSQL_PORT:-3344}:3306"
     environment:
@@ -85,6 +89,7 @@ services:
 
   redis:
     image: redis:alpine
+    container_name: sistork-backend-redis
     networks:
       - laravel-development
 

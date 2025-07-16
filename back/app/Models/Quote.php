@@ -13,12 +13,17 @@ class Quote extends Model
         'total',
         'notes',
         'expires_at',
-        'status'
+        'status',
+        'scheduled_date',
+        'scheduled_time',
+        'schedule_notes'
     ];
 
     protected $casts = [
         'total' => 'decimal:2',
         'expires_at' => 'datetime',
+        'scheduled_date' => 'date',
+        'scheduled_time' => 'datetime:H:i',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -36,5 +41,10 @@ class Quote extends Model
     public function quoteServices(): HasMany
     {
         return $this->hasMany(QuoteService::class);
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class);
     }
 }
