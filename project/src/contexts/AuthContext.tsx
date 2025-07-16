@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types';
+import { User, LoginCredentials, RegisterData } from '../types';
+import { authService } from '../services/auth';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  loading: boolean;
+  login: (credentials: LoginCredentials) => Promise<boolean>;
+  register: (data: RegisterData) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,41 +23,63 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('auth_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-      setIsAuthenticated(true);
-    }
+    initializeAuth();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulated authentication
-    if (email === 'admin@oficina.com' && password === 'admin123') {
-      const userData: User = {
-        id: '1',
-        name: 'Administrador',
-        email: 'admin@oficina.com',
-        role: 'admin'
-      };
-      setUser(userData);
-      setIsAuthenticated(true);
-      localStorage.setItem('auth_user', JSON.stringify(userData));
-      return true;
+  const initializeAuth = async () => {
+    if (authService.isAuthenticated()) {
+      try {
+        const userData = await authService.getCurrentUser();
+        setUser(userData);
+      } catch (error) {
+        console.error('Failed to get user data:', error);
+        authService.logout();
+      }
     }
-    return false;
+    setLoading(false);
   };
 
-  const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('auth_user');
+  const login = async (credentials: LoginCredentials): Promise<boolean> => {
+    try {
+      const response = await authService.login(credentials);
+      setUser(response.user);
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
   };
+
+  const register = async (data: RegisterData): Promise<boolean> => {
+    try {
+      const response = await authService.register(data);
+      setUser(response.user);
+      return true;
+    } catch (error) {
+      console.error('Registration failed:', error);
+      return false;
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    await authService.logout();
+    setUser(null);
+  };
+
+  const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isAuthenticated, 
+      loading, 
+      login, 
+      register, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );

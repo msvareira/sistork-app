@@ -11,6 +11,7 @@ import StockManagement from './components/StockManagement';
 import QuoteManagement from './components/QuoteManagement';
 import Schedule from './components/Schedule';
 import POS from './components/POS';
+import ApiTestComponent from './components/ApiTestComponent';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -70,6 +71,13 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <POS />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/api-test" element={
+              <ProtectedRoute>
+                <Layout>
+                  <ApiTestComponent />
                 </Layout>
               </ProtectedRoute>
             } />
