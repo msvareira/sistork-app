@@ -9,6 +9,8 @@ use App\Http\Controllers\PartController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AIController;
+use App\Http\Controllers\SaleController;
+use App\Http\Controllers\PaymentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +38,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('parts', PartController::class);
     Route::apiResource('quotes', QuoteController::class);
     Route::apiResource('appointments', AppointmentController::class);
+    
+    // PDV Routes
+    Route::apiResource('sales', SaleController::class);
+    Route::apiResource('payments', PaymentController::class);
+    
+    // PDV Special routes
+    Route::post('/sales/{sale}/complete', [SaleController::class, 'complete']);
+    Route::post('/sales/{sale}/payments', [SaleController::class, 'addPayment']);
+    Route::get('/sales/report/summary', [SaleController::class, 'report']);
+    Route::get('/products/search', [SaleController::class, 'searchProducts']);
     
     // Special routes
     Route::post('/appointments/from-quote', [AppointmentController::class, 'createFromQuote']);

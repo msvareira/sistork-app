@@ -11,6 +11,7 @@ import StockManagement from './components/StockManagement';
 import QuoteManagement from './components/QuoteManagement';
 import Schedule from './components/Schedule';
 import POS from './components/POS';
+import PDV from './pages/PDV';
 import ApiTestComponent from './components/ApiTestComponent';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -79,6 +80,11 @@ function App() {
                 <Layout>
                   <POS />
                 </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/pdv" element={
+              <ProtectedRoute>
+                <PDV />
               </ProtectedRoute>
             } />
             <Route path="/api-test" element={
