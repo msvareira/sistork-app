@@ -2,11 +2,11 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
+import { ToastProvider } from './contexts/ToastContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Layout from './components/Layout';
 import ClientManagement from './components/ClientManagement';
-import ServiceManagement from './components/ServiceManagement';
 import StockManagement from './components/StockManagement';
 import QuoteManagement from './components/QuoteManagement';
 import Schedule from './components/Schedule';
@@ -20,13 +20,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <DataProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={
-              <ProtectedRoute>
+    <ToastProvider>
+      <AuthProvider>
+        <DataProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/api-test-public" element={<ApiTestComponent />} />
+              <Route path="/" element={
+                <ProtectedRoute>
                 <Layout>
                   <Dashboard />
                 </Layout>
@@ -36,13 +38,6 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <ClientManagement />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/services" element={
-              <ProtectedRoute>
-                <Layout>
-                  <ServiceManagement />
                 </Layout>
               </ProtectedRoute>
             } />
@@ -85,6 +80,7 @@ function App() {
         </Router>
       </DataProvider>
     </AuthProvider>
+  </ToastProvider>
   );
 }
 

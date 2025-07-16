@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useToast } from '../contexts/ToastContext';
 import { Part } from '../types';
 import { 
   Plus, 
@@ -11,9 +12,11 @@ import {
   AlertTriangle,
   X
 } from 'lucide-react';
+import { LoadingButton, LoadingCard } from './LoadingComponents';
 
 export default function StockManagement() {
-  const { parts, addPart, updatePart, deletePart } = useData();
+  const { parts, addPart, updatePart, deletePart, loadingStates } = useData();
+  const { success, error } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,14 +36,21 @@ export default function StockManagement() {
     part.supplier?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingPart) {
-      updatePart(editingPart.id, formData);
-    } else {
-      addPart(formData);
+    try {
+      if (editingPart) {
+        await updatePart(editingPart.id, formData);
+        success('Peça atualizada', 'Os dados da peça foram atualizados com sucesso.');
+      } else {
+        await addPart(formData);
+        success('Peça cadastrada', 'A nova peça foi cadastrada com sucesso.');
+      }
+      resetForm();
+    } catch (err) {
+      console.error('Error saving part:', err);
+      error('Erro ao salvar', 'Não foi possível salvar os dados da peça. Tente novamente.');
     }
-    resetForm();
   };
 
   const resetForm = () => {
@@ -69,9 +79,15 @@ export default function StockManagement() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir esta peça?')) {
-      deletePart(id);
+      try {
+        await deletePart(id);
+        success('Peça excluída', 'A peça foi removida do estoque com sucesso.');
+      } catch (err) {
+        console.error('Error deleting part:', err);
+        error('Erro ao excluir', 'Não foi possível excluir a peça. Tente novamente.');
+      }
     }
   };
 
@@ -79,24 +95,30 @@ export default function StockManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Gestão de Estoque</h1>
-        <button
+        <LoadingButton
+          loading={loadingStates.operations}
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
         >
           <Plus className="h-5 w-5" />
           <span>Nova Peça</span>
-        </button>
+        </LoadingButton>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nome, código ou fornecedor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+      {/* Loading state for data fetching */}
+      {loadingStates.parts ? (
+        <LoadingCard message="Carregando peças..." className="min-h-64" />
+      ) : (
+        <>
+          {/* Search */}
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, código ou fornecedor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -211,16 +233,18 @@ export default function StockManagement() {
               </div>
 
               <div className="flex space-x-3">
-                <button
+                <LoadingButton
                   type="submit"
+                  loading={loadingStates.operations}
                   className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
                 >
                   {editingPart ? 'Atualizar' : 'Salvar'}
-                </button>
+                </LoadingButton>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400"
+                  disabled={loadingStates.operations}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -246,13 +270,15 @@ export default function StockManagement() {
                 <div className="flex space-x-2">
                   <button
                     onClick={() => handleEdit(part)}
-                    className="text-blue-600 hover:text-blue-700"
+                    disabled={loadingStates.operations}
+                    className="text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(part.id)}
-                    className="text-red-600 hover:text-red-700"
+                    disabled={loadingStates.operations}
+                    className="text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -299,6 +325,8 @@ export default function StockManagement() {
           );
         })}
       </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 }

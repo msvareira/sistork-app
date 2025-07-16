@@ -47,74 +47,72 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function useData() {
   const context = useContext(DataContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useData must be used within a DataProvider');
   }
   return context;
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { token } = useAuth();
+
+  // State
   const [clients, setClients] = useState<Client[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingStates, setLoadingStates] = useState({
     clients: false,
     parts: false,
     quotes: false,
-    operations: false,
+    operations: false
   });
   const [error, setError] = useState<string | null>(null);
-  
-  const { isAuthenticated } = useAuth();
 
-  // Load data when authenticated
+  // Initialize data
   useEffect(() => {
-    if (isAuthenticated) {
-      loadInitialData();
-    }
-  }, [isAuthenticated]);
-
-  const loadInitialData = async () => {
-    setLoading(true);
-    setError(null);
+    if (!token) return;
     
-    try {
-      await Promise.all([
-        refreshClients(),
-        refreshParts(),
-        refreshQuotes()
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const initializeData = async () => {
+      try {
+        setLoading(true);
+        await Promise.all([
+          refreshClients(),
+          refreshParts(),
+          refreshQuotes(),
+        ]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [token]);
 
   // Client methods
   const refreshClients = async () => {
-    setLoadingStates(prev => ({ ...prev, clients: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, clients: true }));
       const clientsData = await clientService.getAll();
       setClients(clientsData);
     } catch (err) {
-      console.error('Failed to load clients:', err);
-      throw err;
+      setError(err instanceof Error ? err.message : 'Failed to load clients');
     } finally {
       setLoadingStates(prev => ({ ...prev, clients: false }));
     }
   };
 
   const addClient = async (clientData: Omit<Client, 'id' | 'createdAt'>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const newClient = await clientService.create(clientData);
       setClients(prev => [newClient, ...prev]);
     } catch (err) {
-      console.error('Failed to create client:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add client');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -122,14 +120,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateClient = async (id: string, clientData: Partial<Client>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const updatedClient = await clientService.update(id, clientData);
       setClients(prev => prev.map(client => 
         client.id === id ? updatedClient : client
       ));
     } catch (err) {
-      console.error('Failed to update client:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update client');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -137,12 +135,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteClient = async (id: string) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       await clientService.delete(id);
       setClients(prev => prev.filter(client => client.id !== id));
     } catch (err) {
-      console.error('Failed to delete client:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete client');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -151,25 +149,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Part methods
   const refreshParts = async () => {
-    setLoadingStates(prev => ({ ...prev, parts: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, parts: true }));
       const partsData = await partService.getAll();
       setParts(partsData);
     } catch (err) {
-      console.error('Failed to load parts:', err);
-      throw err;
+      setError(err instanceof Error ? err.message : 'Failed to load parts');
     } finally {
       setLoadingStates(prev => ({ ...prev, parts: false }));
     }
   };
 
   const addPart = async (partData: Omit<Part, 'id' | 'createdAt'>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const newPart = await partService.create(partData);
       setParts(prev => [newPart, ...prev]);
     } catch (err) {
-      console.error('Failed to create part:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add part');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -177,14 +174,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updatePart = async (id: string, partData: Partial<Part>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const updatedPart = await partService.update(id, partData);
       setParts(prev => prev.map(part => 
         part.id === id ? updatedPart : part
       ));
     } catch (err) {
-      console.error('Failed to update part:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update part');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -192,38 +189,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deletePart = async (id: string) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       await partService.delete(id);
       setParts(prev => prev.filter(part => part.id !== id));
     } catch (err) {
-      console.error('Failed to delete part:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete part');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
     }
   };
+
   // Quote methods
   const refreshQuotes = async () => {
-    setLoadingStates(prev => ({ ...prev, quotes: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, quotes: true }));
       const quotesData = await quoteService.getAll();
       setQuotes(quotesData);
     } catch (err) {
-      console.error('Failed to load quotes:', err);
-      throw err;
+      setError(err instanceof Error ? err.message : 'Failed to load quotes');
     } finally {
       setLoadingStates(prev => ({ ...prev, quotes: false }));
     }
   };
 
   const addQuote = async (quoteData: Omit<Quote, 'id' | 'createdAt'>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const newQuote = await quoteService.create(quoteData);
       setQuotes(prev => [newQuote, ...prev]);
     } catch (err) {
-      console.error('Failed to create quote:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add quote');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -231,14 +228,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateQuote = async (id: string, quoteData: Partial<Quote>) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       const updatedQuote = await quoteService.update(id, quoteData);
       setQuotes(prev => prev.map(quote => 
         quote.id === id ? updatedQuote : quote
       ));
     } catch (err) {
-      console.error('Failed to update quote:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update quote');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
@@ -246,25 +243,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteQuote = async (id: string) => {
-    setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
+      setLoadingStates(prev => ({ ...prev, operations: true }));
       await quoteService.delete(id);
       setQuotes(prev => prev.filter(quote => quote.id !== id));
     } catch (err) {
-      console.error('Failed to delete quote:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete quote');
       throw err;
     } finally {
       setLoadingStates(prev => ({ ...prev, operations: false }));
     }
   };
 
+  // Appointment methods (placeholder for now)
   const addAppointment = (appointmentData: Omit<Appointment, 'id' | 'createdAt'>) => {
     const newAppointment: Appointment = {
       ...appointmentData,
-      id: Date.now().toString(),
-      createdAt: new Date()
+      id: Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString()
     };
-    setAppointments(prev => [...prev, newAppointment]);
+    setAppointments(prev => [newAppointment, ...prev]);
   };
 
   const updateAppointment = (id: string, appointmentData: Partial<Appointment>) => {
@@ -277,13 +275,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setAppointments(prev => prev.filter(appointment => appointment.id !== id));
   };
 
+  // Sale methods (placeholder for now)
   const addSale = (saleData: Omit<Sale, 'id' | 'createdAt'>) => {
     const newSale: Sale = {
       ...saleData,
-      id: Date.now().toString(),
-      createdAt: new Date()
+      id: Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString()
     };
-    setSales(prev => [...prev, newSale]);
+    setSales(prev => [newSale, ...prev]);
   };
 
   return (

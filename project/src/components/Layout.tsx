@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   Home, 
   Users, 
-  Settings, 
   Package, 
   FileText, 
   Calendar, 
@@ -28,7 +27,6 @@ export default function Layout({ children }: LayoutProps) {
   const menuItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: Users, label: 'Clientes', path: '/clients' },
-    { icon: Settings, label: 'Serviços', path: '/services' },
     { icon: Package, label: 'Estoque', path: '/stock' },
     { icon: FileText, label: 'Orçamentos', path: '/quotes' },
     { icon: Calendar, label: 'Agenda', path: '/schedule' },

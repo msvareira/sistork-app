@@ -39,41 +39,28 @@ export interface Part {
   createdAt: Date;
 }
 
-export interface Service {
-  id: string;
-  clientId: string;
-  client?: Client;
-  description: string;
-  parts: ServicePart[];
-  laborCost: number;
-  status: 'open' | 'in_progress' | 'finished';
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ServicePart {
-  partId: string;
-  part?: Part;
-  quantity: number;
-  unitPrice: number;
-}
-
 export interface Quote {
   id: string;
   clientId: string;
   client?: Client;
-  items: QuoteItem[];
-  laborCost: number;
+  parts: QuotePart[];
+  services: QuoteService[];
   total: number;
   notes?: string;
   createdAt: Date;
   expiresAt: Date;
-  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  status: 'pending' | 'approved' | 'in_progress' | 'completed' | 'paid' | 'rejected' | 'expired';
 }
 
-export interface QuoteItem {
-  type: 'part' | 'service';
+export interface QuotePart {
+  partId: string;
+  part?: Part;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface QuoteService {
   description: string;
   quantity: number;
   unitPrice: number;

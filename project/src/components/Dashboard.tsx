@@ -1,8 +1,6 @@
-import React from 'react';
 import { useData } from '../contexts/DataContext';
 import { 
   Users, 
-  Settings, 
   Package, 
   FileText, 
   Calendar, 
@@ -12,16 +10,41 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { clients, services, parts, quotes, appointments, sales } = useData();
+  const { clients, parts, quotes, appointments, sales } = useData();
 
-  const activeServices = services.filter(s => s.status === 'in_progress').length;
+  // Status helper functions
+  const getStatusLabel = (status: string) => {
+    const labels = {
+      'pending': 'Pendente',
+      'approved': 'Aprovado',
+      'in_progress': 'Em Execução',
+      'completed': 'Concluído',
+      'paid': 'Pago',
+      'rejected': 'Rejeitado',
+      'expired': 'Expirado'
+    };
+    return labels[status as keyof typeof labels] || status;
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors = {
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'approved': 'bg-blue-100 text-blue-800',
+      'in_progress': 'bg-orange-100 text-orange-800',
+      'completed': 'bg-green-100 text-green-800',
+      'paid': 'bg-emerald-100 text-emerald-800',
+      'rejected': 'bg-red-100 text-red-800',
+      'expired': 'bg-gray-100 text-gray-800'
+    };
+    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+  };
+
   const lowStockItems = parts.filter(p => p.quantity < 5).length;
   const pendingQuotes = quotes.filter(q => q.status === 'pending').length;
-  const todayAppointments = appointments.filter(a => {
-    const today = new Date();
-    const appointmentDate = new Date(a.date);
-    return appointmentDate.toDateString() === today.toDateString();
-  }).length;
+  const approvedQuotes = quotes.filter(q => q.status === 'approved').length;
+  const inProgressQuotes = quotes.filter(q => q.status === 'in_progress').length;
+  const completedQuotes = quotes.filter(q => q.status === 'completed').length;
+  const paidQuotes = quotes.filter(q => q.status === 'paid').length;
 
   const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
 
@@ -32,13 +55,6 @@ export default function Dashboard() {
       icon: Users,
       color: 'bg-blue-500',
       change: '+12%'
-    },
-    {
-      title: 'Serviços Ativos',
-      value: activeServices,
-      icon: Settings,
-      color: 'bg-green-500',
-      change: '+8%'
     },
     {
       title: 'Itens em Estoque',
@@ -55,10 +71,24 @@ export default function Dashboard() {
       change: '+5%'
     },
     {
-      title: 'Agendamentos Hoje',
-      value: todayAppointments,
+      title: 'Orçamentos Aprovados',
+      value: approvedQuotes,
+      icon: FileText,
+      color: 'bg-blue-500',
+      change: '+10%'
+    },
+    {
+      title: 'Orçamentos em Execução',
+      value: inProgressQuotes,
+      icon: TrendingUp,
+      color: 'bg-orange-500',
+      change: '+8%'
+    },
+    {
+      title: 'Orçamentos Finalizados',
+      value: completedQuotes + paidQuotes,
       icon: Calendar,
-      color: 'bg-indigo-500',
+      color: 'bg-green-500',
       change: '+15%'
     },
     {
@@ -123,28 +153,20 @@ export default function Dashboard() {
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Serviços Recentes</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Orçamentos Recentes</h3>
           <div className="space-y-3">
-            {services.slice(0, 5).map((service) => {
-              const client = clients.find(c => c.id === service.clientId);
-              const partsTotal = service.parts.reduce((sum, part) => sum + (part.quantity * part.unitPrice), 0);
-              const total = partsTotal + service.laborCost;
+            {quotes.slice(0, 5).map((quote) => {
+              const client = clients.find(c => c.id === quote.clientId);
               
               return (
-                <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={quote.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900">{service.description}</p>
+                    <p className="font-medium text-gray-900">Orçamento #{quote.id}</p>
                     <p className="text-sm text-gray-500">Cliente: {client?.name}</p>
-                    <p className="text-sm font-medium text-green-600">Total: R$ {total.toFixed(2)}</p>
+                    <p className="text-sm font-medium text-green-600">Total: R$ {quote.total.toFixed(2)}</p>
                   </div>
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    service.status === 'open' ? 'bg-blue-100 text-blue-800' :
-                    service.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {service.status === 'open' ? 'Aberto' :
-                     service.status === 'in_progress' ? 'Em Andamento' :
-                     'Finalizado'}
+                  <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(quote.status)}`}>
+                    {getStatusLabel(quote.status)}
                   </span>
                 </div>
               );

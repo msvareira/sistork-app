@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useToast } from '../contexts/ToastContext';
 import { Client } from '../types';
 import { 
   Plus, 
@@ -11,9 +12,11 @@ import {
   FileText,
   X
 } from 'lucide-react';
+import { LoadingButton, LoadingCard } from './LoadingComponents';
 
 export default function ClientManagement() {
-  const { clients, addClient, updateClient, deleteClient } = useData();
+  const { clients, addClient, updateClient, deleteClient, loadingStates } = useData();
+  const { success, error } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,14 +41,21 @@ export default function ClientManagement() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedClients = filteredClients.slice(startIndex, startIndex + itemsPerPage);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingClient) {
-      updateClient(editingClient.id, formData);
-    } else {
-      addClient(formData);
+    try {
+      if (editingClient) {
+        await updateClient(editingClient.id, formData);
+        success('Cliente atualizado', 'Os dados do cliente foram atualizados com sucesso.');
+      } else {
+        await addClient(formData);
+        success('Cliente cadastrado', 'O novo cliente foi cadastrado com sucesso.');
+      }
+      resetForm();
+    } catch (err) {
+      console.error('Error saving client:', err);
+      error('Erro ao salvar', 'Não foi possível salvar os dados do cliente. Tente novamente.');
     }
-    resetForm();
   };
 
   const resetForm = () => {
@@ -72,9 +82,15 @@ export default function ClientManagement() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este cliente?')) {
-      deleteClient(id);
+      try {
+        await deleteClient(id);
+        success('Cliente excluído', 'O cliente foi removido com sucesso.');
+      } catch (err) {
+        console.error('Error deleting client:', err);
+        error('Erro ao excluir', 'Não foi possível excluir o cliente. Tente novamente.');
+      }
     }
   };
 
@@ -82,13 +98,14 @@ export default function ClientManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Gestão de Clientes</h1>
-        <button
+        <LoadingButton
+          loading={loadingStates.operations}
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
         >
           <Plus className="h-5 w-5" />
           <span>Novo Cliente</span>
-        </button>
+        </LoadingButton>
       </div>
 
       {/* Search */}
@@ -105,8 +122,13 @@ export default function ClientManagement() {
         </div>
       </div>
 
-      {/* Client Form Modal */}
-      {showForm && (
+      {/* Loading state for data fetching */}
+      {loadingStates.clients ? (
+        <LoadingCard message="Carregando clientes..." className="min-h-64" />
+      ) : (
+        <>
+          {/* Client Form Modal */}
+          {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
@@ -187,16 +209,18 @@ export default function ClientManagement() {
               </div>
 
               <div className="flex space-x-3">
-                <button
+                <LoadingButton
                   type="submit"
+                  loading={loadingStates.operations}
                   className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
                 >
                   {editingClient ? 'Atualizar' : 'Salvar'}
-                </button>
+                </LoadingButton>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400"
+                  disabled={loadingStates.operations}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -269,13 +293,15 @@ export default function ClientManagement() {
                     <div className="flex items-center justify-end space-x-2">
                       <button
                         onClick={() => handleEdit(client)}
-                        className="text-blue-600 hover:text-blue-900"
+                        disabled={loadingStates.operations}
+                        className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(client.id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={loadingStates.operations}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -314,6 +340,8 @@ export default function ClientManagement() {
           </div>
         )}
       </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 }

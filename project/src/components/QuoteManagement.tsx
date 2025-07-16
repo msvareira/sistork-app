@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Quote, Client, Part } from '../types';
+import { useToast } from '../contexts/ToastContext';
+import { Quote, QuotePart, QuoteService } from '../types';
 import { 
   Plus, 
   Search, 
@@ -8,34 +9,36 @@ import {
   Trash2, 
   FileText, 
   Share2, 
-  Settings,
   X,
-  Calculator,
   User,
   Phone,
   Calendar,
   DollarSign,
-  Package,
-  Wrench
+  CheckCircle,
+  PlayCircle,
+  XCircle,
+  DollarSign as PaidIcon
 } from 'lucide-react';
+import { LoadingButton, LoadingCard } from './LoadingComponents';
 
 export default function QuoteManagement() {
-  const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, convertQuoteToService } = useData();
+  const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, loadingStates } = useData();
+  const { success, error } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
-  const [showConvertModal, setShowConvertModal] = useState<Quote | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   const [formData, setFormData] = useState({
     clientId: '',
-    items: [{ type: 'part' as 'part' | 'service', description: '', partId: '', quantity: 1, unitPrice: 0 }],
-    observations: ''
+    parts: [] as QuotePart[],
+    services: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }] as QuoteService[],
+    notes: ''
   });
 
   const filteredQuotes = quotes.filter(quote => {
-    const client = clients.find(c => c.id === quote.clientId);
+    const client = quote.client || clients.find(c => c.id === quote.clientId);
     return client?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
            client?.phone.includes(searchTerm) ||
            quote.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -50,97 +53,227 @@ export default function QuoteManagement() {
   const resetForm = () => {
     setFormData({
       clientId: '',
-      items: [{ type: 'part', description: '', partId: '', quantity: 1, unitPrice: 0 }],
-      observations: ''
+      parts: [],
+      services: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+      notes: ''
     });
     setEditingQuote(null);
     setShowForm(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const quoteData = {
-      ...formData,
-      items: formData.items.filter(item => 
-        item.description.trim() || item.partId
-      )
-    };
+    try {
+      // Validate client selection
+      if (!formData.clientId) {
+        error('Erro de validação', 'É necessário selecionar um cliente para o orçamento.');
+        return;
+      }
 
-    if (editingQuote) {
-      updateQuote(editingQuote.id, quoteData);
-    } else {
-      addQuote(quoteData);
+      // Process and validate services (required)
+      const processedServices = formData.services
+        .filter(service => service.description.trim())
+        .map(service => ({
+          ...service,
+          total: service.quantity * service.unitPrice
+        }));
+      
+      // Validate that we have at least one service
+      if (processedServices.length === 0) {
+        error('Erro de validação', 'É necessário adicionar pelo menos um serviço ao orçamento.');
+        return;
+      }
+
+      // Process parts (optional)
+      const processedParts = formData.parts.map(part => ({
+        ...part,
+        total: part.quantity * part.unitPrice
+      }));
+      
+      const partsTotal = processedParts.reduce((sum, part) => sum + part.total, 0);
+      const servicesTotal = processedServices.reduce((sum, service) => sum + service.total, 0);
+      const quoteTotal = partsTotal + servicesTotal;
+      
+      const quoteData = {
+        clientId: formData.clientId,
+        parts: processedParts,
+        services: processedServices,
+        total: quoteTotal,
+        notes: formData.notes,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        status: 'pending' as const
+      };
+
+      if (editingQuote) {
+        await updateQuote(editingQuote.id, quoteData);
+        success('Orçamento atualizado', 'O orçamento foi atualizado com sucesso.');
+      } else {
+        await addQuote(quoteData);
+        success('Orçamento criado', 'O novo orçamento foi criado com sucesso.');
+      }
+      
+      resetForm();
+    } catch (err) {
+      console.error('Error saving quote:', err);
+      error('Erro ao salvar', 'Não foi possível salvar o orçamento. Tente novamente.');
     }
-    
-    resetForm();
   };
 
   const handleEdit = (quote: Quote) => {
     setEditingQuote(quote);
     setFormData({
       clientId: quote.clientId,
-      items: quote.items,
-      observations: quote.observations
+      parts: quote.parts || [],
+      services: quote.services || [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+      notes: quote.notes || ''
     });
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este orçamento?')) {
-      deleteQuote(id);
+      try {
+        await deleteQuote(id);
+        success('Orçamento excluído', 'O orçamento foi excluído com sucesso.');
+      } catch (err) {
+        console.error('Error deleting quote:', err);
+        error('Erro ao excluir', 'Não foi possível excluir o orçamento. Tente novamente.');
+      }
     }
   };
 
-  const addItem = () => {
+  const handleStatusChange = async (id: string, newStatus: Quote['status']) => {
+    try {
+      await updateQuote(id, { status: newStatus });
+      success('Status atualizado', `Orçamento marcado como ${getStatusLabel(newStatus)}.`);
+    } catch (err) {
+      console.error('Error updating status:', err);
+      error('Erro ao atualizar', 'Não foi possível atualizar o status. Tente novamente.');
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels = {
+      'pending': 'Pendente',
+      'approved': 'Aprovado',
+      'in_progress': 'Em Execução',
+      'completed': 'Concluído',
+      'paid': 'Pago',
+      'rejected': 'Rejeitado',
+      'expired': 'Expirado'
+    };
+    return labels[status as keyof typeof labels] || status;
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors = {
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'approved': 'bg-blue-100 text-blue-800',
+      'in_progress': 'bg-orange-100 text-orange-800',
+      'completed': 'bg-green-100 text-green-800',
+      'paid': 'bg-emerald-100 text-emerald-800',
+      'rejected': 'bg-red-100 text-red-800',
+      'expired': 'bg-gray-100 text-gray-800'
+    };
+    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+  };
+
+  const addPart = () => {
+    const newPart: QuotePart = {
+      partId: '',
+      quantity: 1,
+      unitPrice: 0,
+      total: 0
+    };
     setFormData({
       ...formData,
-      items: [...formData.items, { type: 'part', description: '', partId: '', quantity: 1, unitPrice: 0 }]
+      parts: [...formData.parts, newPart]
     });
   };
 
-  const removeItem = (index: number) => {
+  const removePart = (index: number) => {
     setFormData({
       ...formData,
-      items: formData.items.filter((_, i) => i !== index)
+      parts: formData.parts.filter((_, i) => i !== index)
     });
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
-    const updatedItems = [...formData.items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
+  const addService = () => {
+    const newService: QuoteService = {
+      description: '',
+      quantity: 1,
+      unitPrice: 0,
+      total: 0
+    };
+    setFormData({
+      ...formData,
+      services: [...formData.services, newService]
+    });
+  };
+
+  const removeService = (index: number) => {
+    setFormData({
+      ...formData,
+      services: formData.services.filter((_, i) => i !== index)
+    });
+  };
+
+  const updatePart = (index: number, field: keyof QuotePart, value: any) => {
+    const updatedParts = [...formData.parts];
+    updatedParts[index] = { ...updatedParts[index], [field]: value };
     
-    // Auto-fill price when selecting a part
-    if (field === 'partId' && value) {
-      const selectedPart = parts.find(item => item.id === value);
+    // Auto-calculate total when quantity or unitPrice changes
+    if (field === 'quantity' || field === 'unitPrice') {
+      updatedParts[index].total = updatedParts[index].quantity * updatedParts[index].unitPrice;
+    }
+    
+    // When partId changes, update part details
+    if (field === 'partId') {
+      const selectedPart = parts.find(p => p.id === value);
       if (selectedPart) {
-        updatedItems[index].unitPrice = selectedPart.sellPrice;
-        updatedItems[index].description = selectedPart.name;
+        updatedParts[index].unitPrice = selectedPart.sellPrice;
+        updatedParts[index].total = updatedParts[index].quantity * selectedPart.sellPrice;
       }
     }
     
-    setFormData({ ...formData, items: updatedItems });
+    setFormData({ ...formData, parts: updatedParts });
   };
 
-  const calculateTotal = (items: Quote['items']) => {
-    return items.reduce((total, item) => total + (item.quantity * item.unitPrice), 0);
-  };
-
-  const handleConvertToService = () => {
-    if (showConvertModal) {
-      convertQuoteToService(showConvertModal.id);
-      setShowConvertModal(null);
+  const updateService = (index: number, field: keyof QuoteService, value: any) => {
+    const updatedServices = [...formData.services];
+    updatedServices[index] = { ...updatedServices[index], [field]: value };
+    
+    // Auto-calculate total when quantity or unitPrice changes
+    if (field === 'quantity' || field === 'unitPrice') {
+      updatedServices[index].total = updatedServices[index].quantity * updatedServices[index].unitPrice;
     }
+    
+    setFormData({ ...formData, services: updatedServices });
+  };
+
+  const calculatePartsTotal = () => {
+    return formData.parts.reduce((total, part) => total + (part.quantity * part.unitPrice), 0);
+  };
+
+  const calculateServicesTotal = () => {
+    return formData.services.reduce((total, service) => total + (service.quantity * service.unitPrice), 0);
+  };
+
+  const calculateQuoteTotal = (quote: Quote) => {
+    const partsTotal = quote.parts.reduce((total, part) => total + (part.quantity * part.unitPrice), 0);
+    const servicesTotal = quote.services.reduce((total, service) => total + (service.quantity * service.unitPrice), 0);
+    return partsTotal + servicesTotal;
   };
 
   const generatePDF = (quote: Quote) => {
-    const client = clients.find(c => c.id === quote.clientId);
+    const client = quote.client || clients.find(c => c.id === quote.clientId);
     alert(`Gerando PDF do orçamento para ${client?.name}...`);
   };
 
   const shareWhatsApp = (quote: Quote) => {
-    const client = clients.find(c => c.id === quote.clientId);
-    const total = calculateTotal(quote.items);
+    const client = quote.client || clients.find(c => c.id === quote.clientId);
+    const total = calculateQuoteTotal(quote);
     const message = `Olá ${client?.name}! Segue seu orçamento: Total: R$ ${total.toFixed(2)}`;
     const url = `https://wa.me/55${client?.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
@@ -150,23 +283,29 @@ export default function QuoteManagement() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Orçamentos</h1>
-        <button
+        <LoadingButton
+          loading={loadingStates.operations}
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           Novo Orçamento
-        </button>
+        </LoadingButton>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar por cliente, telefone ou ID..."
-              value={searchTerm}
+      {/* Loading state for data fetching */}
+      {loadingStates.quotes ? (
+        <LoadingCard message="Carregando orçamentos..." className="min-h-64" />
+      ) : (
+        <>
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar por cliente, telefone ou ID..."
+                  value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
@@ -186,8 +325,8 @@ export default function QuoteManagement() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedQuotes.map((quote) => {
-                const client = clients.find(c => c.id === quote.clientId);
-                const total = calculateTotal(quote.items);
+                const client = quote.client || clients.find(c => c.id === quote.clientId);
+                const total = calculateQuoteTotal(quote);
                 
                 return (
                   <tr key={quote.id} className="hover:bg-gray-50">
@@ -216,52 +355,97 @@ export default function QuoteManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        quote.status === 'pending' 
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : quote.status === 'approved'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {quote.status === 'pending' ? 'Pendente' : 
-                         quote.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(quote.status)}`}>
+                        {getStatusLabel(quote.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => handleEdit(quote)}
-                          className="text-blue-600 hover:text-blue-900"
+                          disabled={loadingStates.operations}
+                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Editar"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => generatePDF(quote)}
-                          className="text-green-600 hover:text-green-900"
+                          disabled={loadingStates.operations}
+                          className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Gerar PDF"
                         >
                           <FileText className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => shareWhatsApp(quote)}
-                          className="text-green-600 hover:text-green-900"
+                          disabled={loadingStates.operations}
+                          className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Enviar WhatsApp"
                         >
                           <Share2 className="w-4 h-4" />
                         </button>
+                        
+                        {/* Status Action Buttons */}
                         {quote.status === 'pending' && (
                           <button
-                            onClick={() => setShowConvertModal(quote)}
-                            className="text-orange-600 hover:text-orange-900"
-                            title="Converter em Serviço"
+                            onClick={() => handleStatusChange(quote.id, 'approved')}
+                            disabled={loadingStates.operations}
+                            className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Aprovar"
                           >
-                            <Settings className="w-4 h-4" />
+                            <CheckCircle className="w-4 h-4" />
                           </button>
                         )}
+                        
+                        {quote.status === 'approved' && (
+                          <button
+                            onClick={() => handleStatusChange(quote.id, 'in_progress')}
+                            disabled={loadingStates.operations}
+                            className="text-orange-600 hover:text-orange-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Iniciar Execução"
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        
+                        {quote.status === 'in_progress' && (
+                          <button
+                            onClick={() => handleStatusChange(quote.id, 'completed')}
+                            disabled={loadingStates.operations}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Concluir"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        
+                        {quote.status === 'completed' && (
+                          <button
+                            onClick={() => handleStatusChange(quote.id, 'paid')}
+                            disabled={loadingStates.operations}
+                            className="text-emerald-600 hover:text-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Marcar como Pago"
+                          >
+                            <PaidIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                        
+                        {(quote.status === 'pending' || quote.status === 'approved') && (
+                          <button
+                            onClick={() => handleStatusChange(quote.id, 'rejected')}
+                            disabled={loadingStates.operations}
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Rejeitar"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        
                         <button
                           onClick={() => handleDelete(quote.id)}
-                          className="text-red-600 hover:text-red-900"
+                          disabled={loadingStates.operations}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Excluir"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -339,68 +523,128 @@ export default function QuoteManagement() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Itens do Orçamento
+                    Peças do Estoque
+                    <span className="text-xs text-gray-500 font-normal ml-1">(opcional)</span>
                   </label>
                   <button
                     type="button"
-                    onClick={addItem}
-                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 flex items-center gap-1"
+                    onClick={addPart}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3" />
-                    Adicionar Item
+                    Adicionar Peça
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Tipo
-                          </label>
-                          <select
-                            value={item.type}
-                            onChange={(e) => updateItem(index, 'type', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="part">Peça</option>
-                            <option value="service">Serviço</option>
-                          </select>
-                        </div>
-
-                        {item.type === 'part' ? (
+                {formData.parts.length > 0 && (
+                  <div className="space-y-3 mb-6">
+                    {formData.parts.map((part, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                           <div className="md:col-span-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               Peça do Estoque
                             </label>
                             <select
-                              value={item.partId}
-                              onChange={(e) => updateItem(index, 'partId', e.target.value)}
+                              value={part.partId}
+                              onChange={(e) => updatePart(index, 'partId', e.target.value)}
                               className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              required
                             >
-                              <option value="">Selecione uma peça</option>
-                              {parts.map(part => (
-                                <option key={part.id} value={part.id}>
-                                  {part.name} - {part.internalCode} (Estoque: {part.quantity})
+                              <option value="">Selecionar peça...</option>
+                              {parts.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} - R$ {p.sellPrice.toFixed(2)}
                                 </option>
                               ))}
                             </select>
                           </div>
-                        ) : (
-                          <div className="md:col-span-2">
+
+                          <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Descrição do Serviço
+                              Quantidade
                             </label>
                             <input
-                              type="text"
-                              value={item.description}
-                              onChange={(e) => updateItem(index, 'description', e.target.value)}
+                              type="number"
+                              min="1"
+                              value={part.quantity}
+                              onChange={(e) => updatePart(index, 'quantity', parseInt(e.target.value) || 1)}
                               className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Descrição do serviço"
                             />
                           </div>
-                        )}
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Preço Unit.
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={part.unitPrice}
+                              onChange={(e) => updatePart(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+
+                          <div className="flex items-end">
+                            <div className="w-full">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Total
+                              </label>
+                              <div className="p-2 bg-gray-50 border border-gray-300 rounded text-sm font-medium">
+                                R$ {(part.quantity * part.unitPrice).toFixed(2)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePart(index)}
+                              className="ml-2 text-red-600 hover:text-red-800"
+                              title="Remover peça"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Serviços <span className="text-red-500">*</span>
+                    <span className="text-xs text-gray-500 font-normal ml-1">(pelo menos um serviço obrigatório)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addService}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Adicionar Serviço
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {formData.services.map((service, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Descrição do Serviço {index === 0 && <span className="text-red-500">*</span>}
+                          </label>
+                          <input
+                            type="text"
+                            value={service.description}
+                            onChange={(e) => updateService(index, 'description', e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Descrição do serviço"
+                            required={index === 0}
+                          />
+                        </div>
 
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -409,8 +653,8 @@ export default function QuoteManagement() {
                           <input
                             type="number"
                             min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                            value={service.quantity}
+                            onChange={(e) => updateService(index, 'quantity', parseInt(e.target.value) || 1)}
                             className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
@@ -423,8 +667,8 @@ export default function QuoteManagement() {
                             type="number"
                             step="0.01"
                             min="0"
-                            value={item.unitPrice}
-                            onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            value={service.unitPrice}
+                            onChange={(e) => updateService(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                             className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
@@ -435,16 +679,26 @@ export default function QuoteManagement() {
                               Total
                             </label>
                             <div className="p-2 bg-gray-50 border border-gray-300 rounded text-sm font-medium">
-                              R$ {(item.quantity * item.unitPrice).toFixed(2)}
+                              R$ {(service.quantity * service.unitPrice).toFixed(2)}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="ml-2 text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {formData.services.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeService(index)}
+                              className="ml-2 text-red-600 hover:text-red-800"
+                              title="Remover serviço"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {formData.services.length === 1 && (
+                            <div className="ml-2 w-6 h-6 flex items-center justify-center">
+                              <span className="text-xs text-gray-400" title="Pelo menos um serviço é obrigatório">
+                                *
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -452,11 +706,22 @@ export default function QuoteManagement() {
                 </div>
 
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-medium text-gray-700">Total Geral:</span>
-                    <span className="text-xl font-bold text-green-600">
-                      R$ {calculateTotal(formData.items).toFixed(2)}
-                    </span>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Subtotal Peças:</span>
+                      <span className="text-sm font-medium">R$ {calculatePartsTotal().toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Subtotal Serviços:</span>
+                      <span className="text-sm font-medium">R$ {calculateServicesTotal().toFixed(2)}</span>
+                    </div>
+                    <hr className="border-gray-300" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-medium text-gray-700">Total Geral:</span>
+                      <span className="text-xl font-bold text-green-600">
+                        R$ {(calculatePartsTotal() + calculateServicesTotal()).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -466,8 +731,8 @@ export default function QuoteManagement() {
                   Observações
                 </label>
                 <textarea
-                  value={formData.observations}
-                  onChange={(e) => setFormData({ ...formData, observations: e.target.value })}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Observações adicionais..."
@@ -478,59 +743,26 @@ export default function QuoteManagement() {
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  disabled={loadingStates.operations}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
+                  loading={loadingStates.operations}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   {editingQuote ? 'Atualizar' : 'Criar'} Orçamento
-                </button>
+                </LoadingButton>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Convert to Service Modal */}
-      {showConvertModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center mb-4">
-              <Settings className="w-6 h-6 text-orange-600 mr-2" />
-              <h2 className="text-xl font-bold">Converter em Serviço</h2>
-            </div>
-            
-            <p className="text-gray-600 mb-6">
-              Deseja converter este orçamento em um serviço? Esta ação irá:
-            </p>
-            
-            <ul className="list-disc list-inside text-sm text-gray-600 mb-6 space-y-1">
-              <li>Criar um novo serviço baseado neste orçamento</li>
-              <li>Marcar o orçamento como aprovado</li>
-              <li>Transferir todas as peças e valores</li>
-            </ul>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowConvertModal(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConvertToService}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2"
-              >
-                <Wrench className="w-4 h-4" />
-                Converter
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 }
