@@ -30,7 +30,7 @@ export default function Layout({ children }: LayoutProps) {
     { icon: Package, label: 'Estoque', path: '/stock' },
     { icon: FileText, label: 'Orçamentos', path: '/quotes' },
     { icon: Calendar, label: 'Agenda', path: '/schedule' },
-    { icon: ShoppingCart, label: 'PDV', path: '/pos' },
+    { icon: ShoppingCart, label: 'PDV', path: '/pdv' },
   ];
 
   const handleLogout = () => {

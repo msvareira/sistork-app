@@ -67,5 +67,7 @@ Route::get('/health', function () {
     ]);
 });
 
-// Test AI route (temporary - no auth required)
+// Test routes (temporary - no auth required)
 Route::post('/test-ai', [AIController::class, 'testAI']);
+Route::get('/products/search', [SaleController::class, 'searchProducts']);
+Route::get('/clients', [ClientController::class, 'index']);

@@ -43,10 +43,6 @@ interface Sale {
   client?: Client;
 }
 
-interface ClientsResponse {
-  data: Client[];
-}
-
 interface SaleResponse {
   message: string;
   sale: Sale;
@@ -89,7 +85,7 @@ const PDV: React.FC = () => {
   useEffect(() => {
     if (searchTerm.length >= 2) {
       searchProducts();
-    } else {
+    } else if (searchTerm.length === 0) {
       setProducts([]);
     }
   }, [searchTerm]);
@@ -100,8 +96,10 @@ const PDV: React.FC = () => {
 
   const loadClients = async () => {
     try {
-      const response = await api.get<ClientsResponse>('/clients');
-      setClients(response.data || response as any);
+      const response = await api.get<any>('/clients');
+      // A resposta pode vir como {data: []} ou direto como []
+      const clientsData = response.data ? response.data : response;
+      setClients(Array.isArray(clientsData) ? clientsData : []);
     } catch (error) {
       console.error('Erro ao carregar clientes:', error);
     }
@@ -109,11 +107,31 @@ const PDV: React.FC = () => {
 
   const searchProducts = async () => {
     try {
+      console.log('Buscando produtos com termo:', searchTerm);
       const response = await api.get<Product[]>(`/products/search?q=${searchTerm}`);
-      setProducts(response);
+      console.log('Resposta da busca:', response);
+      
+      // A resposta pode vir direto como array ou encapsulada
+      const productsData = Array.isArray(response) ? response : (response as any).data || [];
+      console.log('Produtos encontrados:', productsData);
+      setProducts(productsData);
     } catch (error) {
       console.error('Erro ao buscar produtos:', error);
+      setProducts([]);
     }
+  };
+
+  const addManualItem = () => {
+    const newItem: SaleItem = {
+      item_type: 'other',
+      item_name: 'Item Manual',
+      item_code: 'MANUAL-001',
+      quantity: 1,
+      unit_price: 10.00,
+      discount_amount: 0,
+      total_price: 10.00
+    };
+    setSaleItems([...saleItems, newItem]);
   };
 
   const addProductToSale = (product: Product) => {
@@ -212,6 +230,9 @@ const PDV: React.FC = () => {
       return;
     }
 
+    console.log('Iniciando salvamento da venda...');
+    console.log('Itens da venda:', saleItems);
+    
     setLoading(true);
     try {
       const saleData = {
@@ -230,7 +251,11 @@ const PDV: React.FC = () => {
         notes: currentSale.notes
       };
 
+      console.log('Dados da venda a serem enviados:', saleData);
+
       const response = await api.post<SaleResponse>('/sales', saleData);
+      console.log('Resposta da API:', response);
+      
       const savedSale = response.sale;
       
       setCurrentSale(prev => ({
@@ -345,15 +370,26 @@ const PDV: React.FC = () => {
 
         {/* Busca de Produtos */}
         <div className="bg-white p-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Buscar produtos por nome ou código..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          <div className="flex gap-4 mb-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Buscar produtos por nome ou código..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <button
+              onClick={addManualItem}
+              className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Item Manual
+            </button>
           </div>
 
           {/* Resultados da Busca */}
