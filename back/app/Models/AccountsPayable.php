@@ -9,6 +9,8 @@ class AccountsPayable extends Model
 {
     use HasFactory;
 
+    protected $table = 'accounts_payable';
+
     protected $fillable = [
         'supplier_name',
         'supplier_document',
@@ -16,6 +18,7 @@ class AccountsPayable extends Model
         'original_amount',
         'remaining_amount',
         'due_date',
+        'payment_date',
         'issue_date',
         'status',
         'type',
@@ -32,6 +35,7 @@ class AccountsPayable extends Model
         'interest_amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'due_date' => 'date',
+        'payment_date' => 'date',
         'issue_date' => 'date'
     ];
 

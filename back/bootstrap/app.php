@@ -15,12 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // Apply CORS globally to all requests
         $middleware->prepend(\App\Http\Middleware\Cors::class);
 
-        $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        ]);
+        // Remove stateful middleware - using simple token authentication
+        // $middleware->api(prepend: [
+        //     \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        // ]);
 
         $middleware->alias([
             'cors' => \App\Http\Middleware\Cors::class,
+            'custom-sanctum' => \App\Http\Middleware\CustomSanctumAuth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

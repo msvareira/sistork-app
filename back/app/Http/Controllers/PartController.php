@@ -73,4 +73,26 @@ class PartController extends Controller
         $part->delete();
         return response()->json(['message' => 'Part deleted successfully']);
     }
+
+    /**
+     * Get parts with low stock for dashboard
+     */
+    public function lowStock(Request $request): JsonResponse
+    {
+        try {
+            $threshold = $request->threshold ?? 10;
+            
+            $lowStockParts = Part::where('quantity_in_stock', '<=', $threshold)
+                ->where('quantity_in_stock', '>', 0)
+                ->orderBy('quantity_in_stock', 'asc')
+                ->get();
+
+            return response()->json($lowStockParts);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Erro ao carregar produtos com estoque baixo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

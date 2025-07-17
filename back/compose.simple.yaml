@@ -1,0 +1,106 @@
+services:
+  # 🤖 Ollama AI Service - Local LLM Server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sistork-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - laravel-development
+    healthcheck:
+      test: ["CMD-SHELL", "ollama --version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    image: php:8.2-apache
+    container_name: sistork-backend-apache
+    ports:
+      - "8044:80"
+    volumes:
+      - ./:/var/www/html
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html/public
+    working_dir: /var/www/html
+    networks:
+      - laravel-development
+    depends_on:
+      - mysql
+    command: >
+      bash -c "
+        # Instalar extensões PHP necessárias
+        apt-get update &&
+        apt-get install -y libpng-dev libjpeg-dev libfreetype6-dev libzip-dev git unzip &&
+        docker-php-ext-configure gd --with-freetype --with-jpeg &&
+        docker-php-ext-install gd pdo pdo_mysql zip &&
+        
+        # Configurar Apache
+        a2enmod rewrite &&
+        echo 'DocumentRoot /var/www/html/public' > /etc/apache2/sites-available/000-default.conf &&
+        echo '<VirtualHost *:80>' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '    DocumentRoot /var/www/html/public' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '    <Directory /var/www/html/public>' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '        AllowOverride All' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '        Require all granted' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '    </Directory>' >> /etc/apache2/sites-available/000-default.conf &&
+        echo '</VirtualHost>' >> /etc/apache2/sites-available/000-default.conf &&
+        
+        # Instalar Composer
+        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
+        
+        # Aguardar MySQL (método mais simples)
+        echo 'Aguardando MySQL...' &&
+        sleep 30 &&
+        echo 'Tempo de espera concluído!' &&
+        
+        # Instalar dependências se necessário
+        if [ ! -d vendor ]; then
+          composer install --no-dev --optimize-autoloader
+        fi &&
+        
+        # Executar migrações (ignorar erros iniciais)
+        php artisan migrate --force || true &&
+        
+        # Definir permissões
+        chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache &&
+        chmod -R 755 /var/www/html/storage /var/www/html/bootstrap/cache &&
+        
+        # Iniciar Apache
+        apache2-foreground
+      "
+
+  mysql:
+    image: mysql:8.0
+    container_name: sistork-backend-mysql
+    ports:
+      - "3345:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=sistork
+      - MYSQL_USER=sistork
+      - MYSQL_PASSWORD=sistork123
+    volumes:
+      - mysql-data-simple:/var/lib/mysql
+    networks:
+      - laravel-development
+    command: --default-authentication-plugin=mysql_native_password
+
+  redis:
+    image: redis:alpine
+    container_name: sistork-backend-redis
+    networks:
+      - laravel-development
+
+networks:
+  laravel-development:
+
+volumes:
+  mysql-data-simple:
+  ollama_data:

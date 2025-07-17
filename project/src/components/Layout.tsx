@@ -11,7 +11,12 @@ import {
   Menu,
   X,
   LogOut,
-  Wrench
+  Wrench,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  CreditCard,
+  BarChart3
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -31,6 +36,11 @@ export default function Layout({ children }: LayoutProps) {
     { icon: FileText, label: 'Orçamentos', path: '/quotes' },
     { icon: Calendar, label: 'Agenda', path: '/schedule' },
     { icon: ShoppingCart, label: 'PDV', path: '/pdv' },
+    { icon: DollarSign, label: 'Financeiro', path: '/financial' },
+    { icon: TrendingUp, label: 'Contas a Receber', path: '/accounts-receivable' },
+    { icon: TrendingDown, label: 'Contas a Pagar', path: '/accounts-payable' },
+    { icon: CreditCard, label: 'Fluxo de Caixa', path: '/cash-flow' },
+    { icon: BarChart3, label: 'Relatórios', path: '/reports' },
   ];
 
   const handleLogout = () => {
@@ -75,7 +85,12 @@ export default function Layout({ children }: LayoutProps) {
               <button
                 key={item.path}
                 onClick={() => {
-                  navigate(item.path);
+                  if (item.path === '/pdv') {
+                    // Abrir PDV em nova aba
+                    window.open(item.path, '_blank');
+                  } else {
+                    navigate(item.path);
+                  }
                   setSidebarOpen(false);
                 }}
                 className={`w-full flex items-center space-x-3 px-4 py-3 text-left transition-colors ${

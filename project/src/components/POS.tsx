@@ -71,7 +71,7 @@ export default function POS() {
     setCustomerName('');
   };
 
-  const total = cart.reduce((sum, item) => sum + item.total, 0);
+  const total = cart.reduce((sum, item) => sum + Number(item.total), 0);
 
   const handleSale = () => {
     if (cart.length === 0) {

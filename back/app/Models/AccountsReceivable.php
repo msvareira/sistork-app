@@ -11,13 +11,17 @@ class AccountsReceivable extends Model
 {
     use HasFactory;
 
+    protected $table = 'accounts_receivable';
+
     protected $fillable = [
         'sale_id',
+        'quote_id',
         'client_id',
         'document_number',
         'original_amount',
         'remaining_amount',
         'due_date',
+        'payment_date',
         'issue_date',
         'status',
         'type',
@@ -33,12 +37,18 @@ class AccountsReceivable extends Model
         'interest_rate' => 'decimal:2',
         'fine_rate' => 'decimal:2',
         'due_date' => 'date',
+        'payment_date' => 'date',
         'issue_date' => 'date'
     ];
 
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class);
+    }
+
+    public function quote(): BelongsTo
+    {
+        return $this->belongsTo(Quote::class);
     }
 
     public function client(): BelongsTo

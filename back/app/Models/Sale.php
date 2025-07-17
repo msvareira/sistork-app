@@ -63,7 +63,8 @@ class Sale extends Model
     {
         $this->subtotal = $this->saleItems->sum('total_price');
         $this->total_amount = $this->subtotal - $this->discount_amount + $this->tax_amount;
-        $this->save();
+        // Use saveQuietly to avoid triggering events and potential loops
+        $this->saveQuietly();
     }
 
     public function getTotalPaid(): float

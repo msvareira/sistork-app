@@ -226,8 +226,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addQuote = async (quoteData: Omit<Quote, 'id' | 'createdAt'>) => {
     setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
-      const newQuote = await quoteService.create(quoteData);
-      setQuotes(prev => [newQuote, ...prev]);
+      await quoteService.create(quoteData);
+      // Recarregar a listagem completa para garantir sincronização
+      await refreshQuotes();
     } catch (err) {
       console.error('Failed to create quote:', err);
       throw err;
@@ -239,10 +240,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateQuote = async (id: string, quoteData: Partial<Quote>) => {
     setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
-      const updatedQuote = await quoteService.update(id, quoteData);
-      setQuotes(prev => prev.map(quote => 
-        quote.id === id ? updatedQuote : quote
-      ));
+      await quoteService.update(id, quoteData);
+      // Recarregar a listagem completa para garantir sincronização
+      await refreshQuotes();
     } catch (err) {
       console.error('Failed to update quote:', err);
       throw err;
@@ -255,7 +255,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoadingStates(prev => ({ ...prev, operations: true }));
     try {
       await quoteService.delete(id);
-      setQuotes(prev => prev.filter(quote => quote.id !== id));
+      // Recarregar a listagem completa para garantir sincronização
+      await refreshQuotes();
     } catch (err) {
       console.error('Failed to delete quote:', err);
       throw err;

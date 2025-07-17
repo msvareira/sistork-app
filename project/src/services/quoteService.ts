@@ -86,16 +86,16 @@ export const quoteService = {
         partId: part.partId,
         part: part.part,
         quantity: part.quantity,
-        unitPrice: part.unitPrice || parseFloat(part.unit_price || part.unitPrice),
-        total: part.total || parseFloat(part.total)
+        unitPrice: parseFloat(part.unit_price || part.unitPrice) || 0,
+        total: parseFloat(part.total) || 0
       })) : [],
       services: apiQuote.services ? apiQuote.services.map((service: any): QuoteService => ({
         description: service.description,
         quantity: service.quantity,
-        unitPrice: service.unitPrice || parseFloat(service.unit_price || service.unitPrice),
-        total: service.total || parseFloat(service.total)
+        unitPrice: parseFloat(service.unit_price || service.unitPrice) || 0,
+        total: parseFloat(service.total) || 0
       })) : [],
-      total: apiQuote.total || parseFloat(apiQuote.total),
+      total: parseFloat(apiQuote.total) || 0,
       notes: apiQuote.notes,
       expiresAt: new Date(apiQuote.expiresAt || apiQuote.expires_at),
       status: apiQuote.status,

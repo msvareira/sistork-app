@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import { ToastProvider } from './contexts/ToastContext';
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
+import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import ClientManagement from './components/ClientManagement';
 import StockManagement from './components/StockManagement';
@@ -12,6 +12,11 @@ import QuoteManagement from './components/QuoteManagement';
 import Schedule from './components/Schedule';
 import POS from './components/POS';
 import PDV from './pages/PDV';
+import Financial from './pages/Financial';
+import AccountsReceivable from './pages/AccountsReceivable';
+import AccountsPayable from './pages/AccountsPayable';
+import CashFlow from './pages/CashFlow';
+import Reports from './pages/Reports';
 import ApiTestComponent from './components/ApiTestComponent';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -85,6 +90,41 @@ function App() {
             <Route path="/pdv" element={
               <ProtectedRoute>
                 <PDV />
+              </ProtectedRoute>
+            } />
+            <Route path="/financial" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Financial />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/accounts-receivable" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AccountsReceivable />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/accounts-payable" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AccountsPayable />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/cash-flow" element={
+              <ProtectedRoute>
+                <Layout>
+                  <CashFlow />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/reports" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Reports />
+                </Layout>
               </ProtectedRoute>
             } />
             <Route path="/api-test" element={

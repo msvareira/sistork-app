@@ -44,7 +44,8 @@ class SaleItem extends Model
     public function calculateTotal(): void
     {
         $this->total_price = ($this->quantity * $this->unit_price) - $this->discount_amount;
-        $this->save();
+        // Do not save here - let the calling code handle the save
+        // This method just calculates and sets the value
     }
 
     public function getSubtotal(): float
@@ -65,11 +66,17 @@ class SaleItem extends Model
         });
         
         static::saved(function ($saleItem) {
-            $saleItem->sale->calculateTotal();
+            // Recalculate Sale total after SaleItem is saved
+            if ($saleItem->sale_id && $saleItem->sale) {
+                $saleItem->sale->calculateTotal();
+            }
         });
         
         static::deleted(function ($saleItem) {
-            $saleItem->sale->calculateTotal();
+            // Recalculate Sale total after SaleItem is deleted
+            if ($saleItem->sale_id && $saleItem->sale) {
+                $saleItem->sale->calculateTotal();
+            }
         });
     }
 }

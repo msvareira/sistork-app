@@ -71,4 +71,20 @@ class ClientController extends Controller
         $client->delete();
         return response()->json(['message' => 'Client deleted successfully']);
     }
+
+    /**
+     * Get clients count for dashboard
+     */
+    public function count(): JsonResponse
+    {
+        try {
+            $count = Client::count();
+            return response()->json(['count' => $count]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Erro ao contar clientes: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

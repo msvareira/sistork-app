@@ -29,9 +29,22 @@ class Cors
             'http://127.0.0.1:5173',
             'http://127.0.0.1:5174',
             'http://127.0.0.1:3000',
+            'http://127.0.0.1:8044',
+            // Adicionar origens do container Docker
+            'http://sistork-frontend:3000',
+            'http://sistork-frontend:5173',
+            'http://host.docker.internal:3000',
+            'http://host.docker.internal:5173',
         ];
 
         $origin = $request->header('Origin');
+
+        // Log para debug
+        Log::info('CORS Debug', [
+            'origin' => $origin,
+            'allowed_origins' => $allowedOrigins,
+            'is_allowed' => in_array($origin, $allowedOrigins)
+        ]);
 
         if (in_array($origin, $allowedOrigins)) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);

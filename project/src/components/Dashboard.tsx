@@ -46,7 +46,7 @@ export default function Dashboard() {
   const completedQuotes = quotes.filter(q => q.status === 'completed').length;
   const paidQuotes = quotes.filter(q => q.status === 'paid').length;
 
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
 
   const stats = [
     {

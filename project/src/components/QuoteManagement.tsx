@@ -17,7 +17,6 @@ import {
   CheckCircle,
   PlayCircle,
   XCircle,
-  DollarSign as PaidIcon,
   Brain
 } from 'lucide-react';
 import { LoadingButton, LoadingCard } from './LoadingComponents';
@@ -48,6 +47,7 @@ export default function QuoteManagement() {
     time: '',
     notes: ''
   });
+  const [pdfLoadingQuote, setPdfLoadingQuote] = useState<string | null>(null);
 
   const filteredQuotes = quotes.filter(quote => {
     const client = quote.client || clients.find(c => c.id === quote.clientId);
@@ -103,8 +103,8 @@ export default function QuoteManagement() {
         total: part.quantity * part.unitPrice
       }));
       
-      const partsTotal = processedParts.reduce((sum, part) => sum + part.total, 0);
-      const servicesTotal = processedServices.reduce((sum, service) => sum + service.total, 0);
+      const partsTotal = processedParts.reduce((sum, part) => sum + Number(part.total), 0);
+      const servicesTotal = processedServices.reduce((sum, service) => sum + Number(service.total), 0);
       const quoteTotal = partsTotal + servicesTotal;
       
       const quoteData = {
@@ -133,17 +133,37 @@ export default function QuoteManagement() {
   };
 
   const handleEdit = (quote: Quote) => {
+    // Verificar se o orçamento está concluído
+    if (quote.status === 'completed') {
+      alert('Orçamentos concluídos não podem ser editados.');
+      return;
+    }
+
+    console.log('handleEdit - quote data:', quote);
+    console.log('handleEdit - quote.parts:', quote.parts);
+    console.log('handleEdit - quote.services:', quote.services);
+    
     setEditingQuote(quote);
     setFormData({
       clientId: quote.clientId,
       parts: quote.parts || [],
-      services: quote.services || [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+      services: quote.services && quote.services.length > 0 
+        ? quote.services 
+        : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
       notes: quote.notes || ''
     });
     setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
+    // Encontrar o orçamento para verificar o status
+    const quote = quotes.find(q => q.id === id);
+    
+    if (quote && quote.status === 'completed') {
+      alert('Orçamentos concluídos não podem ser excluídos.');
+      return;
+    }
+
     if (confirm('Tem certeza que deseja excluir este orçamento?')) {
       try {
         await deleteQuote(id);
@@ -165,13 +185,46 @@ export default function QuoteManagement() {
     }
   };
 
+  const handleDownloadPdf = async (quoteId: string) => {
+    setPdfLoadingQuote(quoteId);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/quotes/${quoteId}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao gerar PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `orcamento_${quoteId.padStart(6, '0')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      success('PDF gerado', 'O PDF do orçamento foi gerado com sucesso.');
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      error('Erro ao gerar PDF', 'Não foi possível gerar o PDF do orçamento. Tente novamente.');
+    } finally {
+      setPdfLoadingQuote(null);
+    }
+  };
+
   const getStatusLabel = (status: string) => {
     const labels = {
       'pending': 'Pendente',
       'approved': 'Aprovado',
       'in_progress': 'Em Execução',
       'completed': 'Concluído',
-      'paid': 'Pago',
       'rejected': 'Rejeitado',
       'expired': 'Expirado'
     };
@@ -184,7 +237,6 @@ export default function QuoteManagement() {
       'approved': 'bg-blue-100 text-blue-800',
       'in_progress': 'bg-orange-100 text-orange-800',
       'completed': 'bg-green-100 text-green-800',
-      'paid': 'bg-emerald-100 text-emerald-800',
       'rejected': 'bg-red-100 text-red-800',
       'expired': 'bg-gray-100 text-gray-800'
     };
@@ -273,14 +325,23 @@ export default function QuoteManagement() {
   };
 
   const calculateQuoteTotal = (quote: Quote) => {
-    const partsTotal = quote.parts.reduce((total, part) => total + (part.quantity * part.unitPrice), 0);
-    const servicesTotal = quote.services.reduce((total, service) => total + (service.quantity * service.unitPrice), 0);
-    return partsTotal + servicesTotal;
+    console.log('calculateQuoteTotal - quote:', quote);
+    console.log('calculateQuoteTotal - quote.parts:', quote.parts);
+    console.log('calculateQuoteTotal - quote.services:', quote.services);
+    
+    const partsTotal = (quote.parts || []).reduce((total, part) => total + (part.quantity * part.unitPrice), 0);
+    const servicesTotal = (quote.services || []).reduce((total, service) => total + (service.quantity * service.unitPrice), 0);
+    const totalCalculated = partsTotal + servicesTotal;
+    
+    console.log('calculateQuoteTotal - partsTotal:', partsTotal);
+    console.log('calculateQuoteTotal - servicesTotal:', servicesTotal);
+    console.log('calculateQuoteTotal - total calculated:', totalCalculated);
+    
+    return totalCalculated;
   };
 
-  const generatePDF = (quote: Quote) => {
-    const client = quote.client || clients.find(c => c.id === quote.clientId);
-    alert(`Gerando PDF do orçamento para ${client?.name}...`);
+  const generatePDF = async (quote: Quote) => {
+    await handleDownloadPdf(quote.id);
   };
 
   const shareWhatsApp = (quote: Quote) => {
@@ -458,19 +519,23 @@ export default function QuoteManagement() {
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                         <button
                           onClick={() => handleEdit(quote)}
-                          disabled={loadingStates.operations}
-                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Editar"
+                          disabled={loadingStates.operations || quote.status === 'completed'}
+                          className={`${quote.status === 'completed' ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={quote.status === 'completed' ? 'Orçamento concluído não pode ser editado' : 'Editar'}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => generatePDF(quote)}
-                          disabled={loadingStates.operations}
+                          disabled={loadingStates.operations || pdfLoadingQuote === quote.id}
                           className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Gerar PDF"
+                          title={pdfLoadingQuote === quote.id ? "Gerando PDF..." : "Gerar PDF"}
                         >
-                          <FileText className="w-4 h-4" />
+                          {pdfLoadingQuote === quote.id ? (
+                            <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <FileText className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => shareWhatsApp(quote)}
@@ -523,17 +588,6 @@ export default function QuoteManagement() {
                           </button>
                         )}
                         
-                        {quote.status === 'completed' && (
-                          <button
-                            onClick={() => handleStatusChange(quote.id, 'paid')}
-                            disabled={loadingStates.operations}
-                            className="text-emerald-600 hover:text-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Marcar como Pago"
-                          >
-                            <PaidIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                        
                         {(quote.status === 'pending' || quote.status === 'approved') && (
                           <button
                             onClick={() => handleStatusChange(quote.id, 'rejected')}
@@ -547,9 +601,9 @@ export default function QuoteManagement() {
                         
                         <button
                           onClick={() => handleDelete(quote.id)}
-                          disabled={loadingStates.operations}
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Excluir"
+                          disabled={loadingStates.operations || quote.status === 'completed'}
+                          className={`${quote.status === 'completed' ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          title={quote.status === 'completed' ? 'Orçamento concluído não pode ser excluído' : 'Excluir'}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -963,6 +1017,21 @@ export default function QuoteManagement() {
           setShowForm(true); // Abrir formulário após aplicar sugestões
         }}
       />
+
+      {/* Modal de Loading do PDF */}
+      {pdfLoadingQuote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 flex items-center space-x-4 shadow-xl">
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Gerando PDF</h3>
+              <p className="text-gray-600 text-sm">
+                Aguarde enquanto o PDF do orçamento #{pdfLoadingQuote.padStart(6, '0')} está sendo gerado...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       </>
     )}

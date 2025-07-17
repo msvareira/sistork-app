@@ -9,8 +9,14 @@ use Illuminate\Support\Facades\Storage;
 
 class AIController extends Controller
 {
-    private $ollamaUrl = 'http://ollama:11434';
-    private $model = 'llama3.2:3b';
+    private $ollamaUrl;
+    private $model;
+
+    public function __construct()
+    {
+        $this->ollamaUrl = env('OLLAMA_URL', 'http://sistork-ollama:11434');
+        $this->model = env('OLLAMA_MODEL', 'llama3.2:3b');
+    }
 
     /**
      * 🤖 DIAGNÓSTICO INTELIGENTE COM IA REAL OLLAMA LOCAL
@@ -123,15 +129,15 @@ class AIController extends Controller
     private function callOllamaAI(string $prompt): string
     {
         try {
-            // Tenta chamar o Ollama local
-            $response = Http::timeout(30)->post($this->ollamaUrl . '/api/generate', [
+            // Tenta chamar o Ollama local com timeout aumentado
+            $response = Http::timeout(60)->post($this->ollamaUrl . '/api/generate', [
                 'model' => $this->model,
                 'prompt' => $prompt,
                 'stream' => false,
                 'options' => [
                     'temperature' => 0.7,
                     'top_p' => 0.9,
-                    'max_tokens' => 1000
+                    'num_predict' => 1000
                 ]
             ]);
 
@@ -140,11 +146,18 @@ class AIController extends Controller
                 return $data['response'] ?? 'Resposta vazia da IA';
             }
 
-            throw new \Exception('Ollama não respondeu: ' . $response->status());
+            // Log do erro específico
+            Log::error('Ollama API Error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'url' => $this->ollamaUrl
+            ]);
+            
+            throw new \Exception('Ollama não respondeu: ' . $response->status() . ' - ' . $response->body());
 
         } catch (\Exception $e) {
             Log::warning('Ollama unavailable: ' . $e->getMessage());
-            throw new \Exception('Serviço de IA local indisponível. Verifique se o Ollama está rodando.');
+            throw new \Exception('Serviço de IA local indisponível. Verifique se o Ollama está rodando. Erro: ' . $e->getMessage());
         }
     }
 

@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Quote;
 use App\Models\QuotePart;
 use App\Models\QuoteService;
+use App\Models\AccountsReceivable;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class QuoteController extends Controller
 {
@@ -91,7 +93,7 @@ class QuoteController extends Controller
             'total' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
             'expires_at' => 'required|date',
-            'status' => 'required|in:pending,approved,in_progress,completed,paid,rejected,expired, ',
+            'status' => 'required|in:pending,approved,in_progress,completed,rejected,expired',
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -192,6 +194,13 @@ class QuoteController extends Controller
     {
         $quote = Quote::findOrFail($id);
 
+        // Verificar se o orçamento está concluído e impedir edições
+        if ($quote->status === 'completed') {
+            return response()->json([
+                'message' => 'Orçamentos concluídos não podem ser editados.'
+            ], 422);
+        }
+
         $request->validate([
             'client_id' => 'sometimes|required|exists:clients,id',
             'services' => 'sometimes|required|array|min:1',
@@ -207,10 +216,12 @@ class QuoteController extends Controller
             'total' => 'sometimes|required|numeric|min:0',
             'notes' => 'nullable|string',
             'expires_at' => 'sometimes|required|date',
-            'status' => 'required|in:pending,approved,in_progress,completed,paid,rejected,expired, ',
+            'status' => 'sometimes|required|in:pending,approved,in_progress,completed,rejected,expired',
         ]);
 
         return DB::transaction(function () use ($request, $quote) {
+            $oldStatus = $quote->status;
+            
             // Atualizar dados básicos do orçamento
             $quote->update([
                 'client_id' => $request->client_id ?? $quote->client_id,
@@ -219,6 +230,29 @@ class QuoteController extends Controller
                 'expires_at' => $request->expires_at ?? $quote->expires_at,
                 'status' => $request->status ?? $quote->status,
             ]);
+
+            // Se o status mudou para 'completed', criar conta a receber
+            $newStatus = $quote->status;
+            if ($oldStatus !== 'completed' && $newStatus === 'completed') {
+                
+                // Verificar se já não existe uma conta a receber para este orçamento
+                $existingReceivable = AccountsReceivable::where('quote_id', $quote->id)->first();
+                
+                if (!$existingReceivable) {
+                    AccountsReceivable::create([
+                        'quote_id' => $quote->id,
+                        'client_id' => $quote->client_id,
+                        'document_number' => 'ORC-' . str_pad($quote->id, 6, '0', STR_PAD_LEFT),
+                        'original_amount' => $quote->total,
+                        'remaining_amount' => $quote->total,
+                        'due_date' => now()->addDays(30), // 30 dias para vencimento
+                        'issue_date' => now(),
+                        'status' => 'pending',
+                        'type' => 'quote',
+                        'description' => 'Orçamento #' . $quote->id . ' - ' . ($quote->notes ?: 'Serviços automotivos')
+                    ]);
+                }
+            }
 
             // Atualizar serviços se fornecidos
             if ($request->has('services')) {
@@ -267,10 +301,39 @@ class QuoteController extends Controller
     {
         $quote = Quote::findOrFail($id);
         
+        // Verificar se o orçamento está concluído e impedir exclusão
+        if ($quote->status === 'completed') {
+            return response()->json([
+                'message' => 'Orçamentos concluídos não podem ser excluídos.'
+            ], 422);
+        }
+        
         return DB::transaction(function () use ($quote) {
             // As peças e serviços serão removidos automaticamente devido às foreign keys
             $quote->delete();
             return response()->json(['message' => 'Quote deleted successfully']);
         });
+    }
+
+    /**
+     * Generate PDF for a quote.
+     */
+    public function generatePdf(string $id)
+    {
+        $quote = Quote::with(['client', 'quoteParts.part', 'quoteServices'])->findOrFail($id);
+        
+        $pdf = Pdf::loadView('pdf.quote', compact('quote'));
+        
+        // Configurações do PDF
+        $pdf->setPaper('A4', 'portrait');
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'defaultFont' => 'DejaVu Sans'
+        ]);
+        
+        $filename = 'orcamento_' . str_pad($quote->id, 6, '0', STR_PAD_LEFT) . '_' . date('Y-m-d') . '.pdf';
+        
+        return $pdf->download($filename);
     }
 }
