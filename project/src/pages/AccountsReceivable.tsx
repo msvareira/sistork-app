@@ -28,6 +28,24 @@ interface NewReceivable {
 }
 
 const AccountsReceivable: React.FC = () => {
+  // Função para formatar data corretamente (evita problema de fuso horário)
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('T')[0].split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  // Função para formatar data e hora
+  const formatDateTime = (dateStr: string): { date: string; time: string } => {
+    if (!dateStr) return { date: '', time: '' };
+    const [year, month, day] = dateStr.split('T')[0].split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return {
+      date: date.toLocaleDateString('pt-BR'),
+      time: new Date(dateStr).toLocaleTimeString('pt-BR')
+    };
+  };
   const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
   const [filteredReceivables, setFilteredReceivables] = useState<AccountReceivable[]>([]);
   const [loading, setLoading] = useState(true);
@@ -376,7 +394,7 @@ const AccountsReceivable: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {new Date(item.due_date).toLocaleDateString('pt-BR')}
+                      {formatDate(item.due_date)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -601,7 +619,7 @@ const AccountsReceivable: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Data de Vencimento:</label>
                 <p className="mt-1 text-gray-900">
-                  {new Date(viewingReceivable.due_date).toLocaleDateString('pt-BR')}
+                  {formatDate(viewingReceivable.due_date)}
                 </p>
               </div>
               <div>
@@ -614,7 +632,7 @@ const AccountsReceivable: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Data de Pagamento:</label>
                   <p className="mt-1 text-gray-900">
-                    {new Date(viewingReceivable.payment_date).toLocaleDateString('pt-BR')}
+                    {formatDate(viewingReceivable.payment_date)}
                   </p>
                 </div>
               )}
@@ -633,7 +651,10 @@ const AccountsReceivable: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Criado em:</label>
                 <p className="mt-1 text-gray-900">
-                  {new Date(viewingReceivable.created_at).toLocaleDateString('pt-BR')} às {new Date(viewingReceivable.created_at).toLocaleTimeString('pt-BR')}
+                  {(() => {
+                    const { date, time } = formatDateTime(viewingReceivable.created_at);
+                    return `${date} às ${time}`;
+                  })()}
                 </p>
               </div>
             </div>

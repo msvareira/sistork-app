@@ -23,6 +23,14 @@ interface RecentSale {
 }
 
 const Dashboard: React.FC = () => {
+  // Função para formatar data corretamente (evita problema de fuso horário)
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('T')[0].split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR');
+  };
+
   const [stats, setStats] = useState<DashboardStats>({
     totalSales: 0,
     totalRevenue: 0,
@@ -52,14 +60,16 @@ const Dashboard: React.FC = () => {
         stockResponse,
         receivablesResponse,
         payablesResponse,
-        recentSalesResponse
+        recentSalesResponse,
+        cashFlowResponse
       ] = await Promise.allSettled([
-        api.get('/sales/stats'),
-        api.get('/clients/count'),
+        api.get('/test-sales-stats'),
+        api.get('/test-clients-count'),
         api.get('/parts/low-stock'),
-        api.get('/accounts-receivable/pending'),
-        api.get('/accounts-payable/pending'),
-        api.get('/sales/recent?limit=5')
+        api.get('/test-accounts-receivable-pending'),
+        api.get('/test-accounts-payable-pending'),
+        api.get('/sales/recent?limit=5'),
+        api.get('/debug-financial')
       ]);
 
       // Processar respostas
@@ -93,11 +103,20 @@ const Dashboard: React.FC = () => {
         setRecentSales((recentSalesResponse.value as any).sales || []);
       }
 
-      // Calcular fluxo de caixa
-      setStats(prev => ({
-        ...prev,
-        cashFlow: prev.totalRevenue - prev.pendingPayables
-      }));
+      // Usar dados reais do debug financeiro
+      if (cashFlowResponse.status === 'fulfilled') {
+        const debugData = cashFlowResponse.value as any;
+        setStats(prev => ({
+          ...prev,
+          cashFlow: debugData.calculated?.balance || 0
+        }));
+      } else {
+        // Fallback para cálculo simples se o debug falhar
+        setStats(prev => ({
+          ...prev,
+          cashFlow: prev.totalRevenue - prev.pendingPayables
+        }));
+      }
 
     } catch (error) {
       console.error('Erro ao carregar dados do dashboard:', error);
@@ -245,7 +264,7 @@ const Dashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 text-sm text-gray-600">
-                        {new Date(sale.created_at).toLocaleDateString('pt-BR')}
+                        {formatDate(sale.created_at)}
                       </td>
                     </tr>
                   ))}

@@ -30,6 +30,20 @@ interface DailySummary {
 }
 
 const CashFlow: React.FC = () => {
+  // Função para formatar data corretamente (evita problema de fuso horário)
+  const formatDate = (dateStr: string): string => {
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  // Função para formatar data com opções específicas
+  const formatDateWithOptions = (dateStr: string, options: Intl.DateTimeFormatOptions): string => {
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR', options);
+  };
+
   const [entries, setEntries] = useState<CashFlowEntry[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummary[]>([]);
   const [summary, setSummary] = useState<CashFlowSummary>({
@@ -118,7 +132,7 @@ const CashFlow: React.FC = () => {
     const csvContent = [
       ['Data', 'Descrição', 'Tipo', 'Valor', 'Categoria', 'Origem'].join(','),
       ...entries.map(entry => [
-        new Date(entry.date).toLocaleDateString('pt-BR'),
+        formatDate(entry.date),
         entry.description,
         entry.type === 'income' ? 'Receita' : 'Despesa',
         entry.amount.toFixed(2),
@@ -271,7 +285,7 @@ const CashFlow: React.FC = () => {
               {dailySummary.slice(-7).map((day, index) => (
                 <div key={index} className="bg-gray-50 rounded-lg p-3 text-center">
                   <div className="text-sm font-medium text-gray-600 mb-2">
-                    {new Date(day.date).toLocaleDateString('pt-BR', { 
+                    {formatDateWithOptions(day.date, { 
                       day: '2-digit', 
                       month: '2-digit' 
                     })}
@@ -327,7 +341,7 @@ const CashFlow: React.FC = () => {
                 return (
                   <tr key={entry.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(entry.date).toLocaleDateString('pt-BR')}
+                      {formatDate(entry.date)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">{entry.description}</div>

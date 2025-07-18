@@ -24,6 +24,22 @@ import AIAssistant from './AIAssistant';
 import { DiagnosticSuggestion } from '../services/aiService';
 
 export default function QuoteManagement() {
+  // Função para formatar data corretamente (evita problema de fuso horário)
+  const formatDate = (dateInput: string | Date): string => {
+    if (!dateInput) return '';
+    
+    let dateStr: string;
+    if (dateInput instanceof Date) {
+      dateStr = dateInput.toISOString().split('T')[0];
+    } else {
+      dateStr = dateInput.split('T')[0];
+    }
+    
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR');
+  };
+
   const { quotes, clients, parts, addQuote, updateQuote, deleteQuote, loadingStates, createAppointmentFromQuote } = useData();
   const { success, error } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
@@ -501,7 +517,7 @@ export default function QuoteManagement() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-900">
                         <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                        {new Date(quote.createdAt).toLocaleDateString('pt-BR')}
+                        {formatDate(quote.createdAt)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

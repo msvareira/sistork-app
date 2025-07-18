@@ -12,7 +12,6 @@ import QuoteManagement from './components/QuoteManagement';
 import Schedule from './components/Schedule';
 import POS from './components/POS';
 import PDV from './pages/PDV';
-import Financial from './pages/Financial';
 import AccountsReceivable from './pages/AccountsReceivable';
 import AccountsPayable from './pages/AccountsPayable';
 import CashFlow from './pages/CashFlow';
@@ -90,13 +89,6 @@ function App() {
             <Route path="/pdv" element={
               <ProtectedRoute>
                 <PDV />
-              </ProtectedRoute>
-            } />
-            <Route path="/financial" element={
-              <ProtectedRoute>
-                <Layout>
-                  <Financial />
-                </Layout>
               </ProtectedRoute>
             } />
             <Route path="/accounts-receivable" element={

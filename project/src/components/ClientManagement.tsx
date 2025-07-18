@@ -15,6 +15,22 @@ import {
 import { LoadingButton, LoadingCard } from './LoadingComponents';
 
 export default function ClientManagement() {
+  // Função para formatar data corretamente (evita problema de fuso horário)
+  const formatDate = (dateInput: string | Date): string => {
+    if (!dateInput) return '';
+    
+    let dateStr: string;
+    if (dateInput instanceof Date) {
+      dateStr = dateInput.toISOString().split('T')[0];
+    } else {
+      dateStr = dateInput.split('T')[0];
+    }
+    
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('pt-BR');
+  };
+
   const { clients, addClient, updateClient, deleteClient, loadingStates } = useData();
   const { success, error } = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -287,7 +303,7 @@ export default function ClientManagement() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {client.createdAt.toLocaleDateString('pt-BR')}
+                    {formatDate(client.createdAt)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
