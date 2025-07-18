@@ -89,6 +89,7 @@ Route::middleware('custom-sanctum')->group(function () {
     Route::get('/cash-flow/by-category', [CashFlowController::class, 'byCategory']);
     Route::get('/cash-flow/projection', [CashFlowController::class, 'projection']);
     Route::get('/cash-flow/export', [CashFlowController::class, 'export']);
+    Route::get('/cash-flow/debug', [CashFlowController::class, 'debug']);
     
     // Reports
     Route::get('/reports/dashboard', [ReportsController::class, 'dashboard']);
@@ -119,3 +120,15 @@ Route::get('/health', function () {
 
 // Test routes (temporary - no auth required)
 Route::post('/test-ai', [AIController::class, 'testAI']);
+Route::get('/debug-financial', [CashFlowController::class, 'debug']);
+Route::get('/test-sales-stats', [SaleController::class, 'stats']);
+Route::get('/test-accounts-receivable-pending', [AccountsReceivableController::class, 'pending']);
+Route::get('/test-accounts-payable-pending', [AccountsPayableController::class, 'pending']);
+Route::get('/test-clients-count', [ClientController::class, 'count']);
+
+// TEMPORÁRIO: Rotas principais sem autenticação para debug
+Route::get('/sales/stats', [SaleController::class, 'stats']);
+Route::get('/clients/count', [ClientController::class, 'count']);
+Route::get('/accounts-receivable-pending', [AccountsReceivableController::class, 'pending']);
+Route::get('/accounts-payable-pending', [AccountsPayableController::class, 'pending']);
+Route::get('/cash-flow/summary', [CashFlowController::class, 'summary']);

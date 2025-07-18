@@ -4,13 +4,13 @@ services:
   # 🌐 Frontend React + Vite
   frontend:
     build:
-      context: ../project
+      context: ./project
       dockerfile: Dockerfile
     container_name: sistork-frontend
     ports:
       - "3000:5173"
     volumes:
-      - ../project:/app
+      - ./project:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8044/api
@@ -44,11 +44,11 @@ services:
   # 🚀 Backend Laravel + PHP + Apache  
   backend:
     image: php:8.2-apache
-    container_name: sistork-backend-apache
+    container_name: sistork-backend
     ports:
       - "8044:80"
     volumes:
-      - ./:/var/www/html
+      - ./back:/var/www/html
     environment:
       - APACHE_DOCUMENT_ROOT=/var/www/html/public
       - DB_CONNECTION=mysql

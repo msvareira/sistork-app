@@ -352,7 +352,7 @@ class AccountsReceivableController extends Controller
 
             return response()->json([
                 'success' => true,
-                'total' => $total
+                'total' => (float) $total
             ]);
 
         } catch (\Exception $e) {

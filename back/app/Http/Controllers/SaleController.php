@@ -494,8 +494,8 @@ class SaleController extends Controller
                 (($totalSales - $previousMonth) / $previousMonth) * 100 : 0;
 
             return response()->json([
-                'total_sales' => $totalSales,
-                'total_revenue' => $totalRevenue,
+                'total_sales' => (int) $totalSales,
+                'total_revenue' => (float) $totalRevenue,
                 'monthly_growth' => round($monthlyGrowth, 2)
             ]);
 

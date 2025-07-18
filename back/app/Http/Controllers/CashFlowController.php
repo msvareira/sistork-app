@@ -10,9 +10,22 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CashFlowController extends Controller
 {
+    /**
+     * Formatar data para o formato correto considerando o fuso horário
+     */
+    private function formatDate($date): string
+    {
+        if (!$date) {
+            return '';
+        }
+        
+        return Carbon::parse($date)->setTimezone('America/Sao_Paulo')->format('Y-m-d');
+    }
+
     /**
      * Obter entradas do fluxo de caixa
      */
@@ -27,13 +40,13 @@ class CashFlowController extends Controller
 
             // Receitas de vendas
             if (!$type || $type === 'income') {
-                $salesEntries = Sale::whereBetween('created_at', [$startDate, $endDate])
+                $salesEntries = Sale::whereBetween('sale_date', [$startDate, $endDate . ' 23:59:59'])
                     ->where('status', 'completed')
                     ->get()
                     ->map(function ($sale) {
                         return [
                             'id' => 'sale_' . $sale->id,
-                            'date' => $sale->created_at->format('Y-m-d'),
+                            'date' => $this->formatDate($sale->sale_date),
                             'description' => "Venda #{$sale->sale_number}",
                             'type' => 'income',
                             'amount' => (float) $sale->total_amount,
@@ -45,16 +58,17 @@ class CashFlowController extends Controller
                 $entries = $entries->concat($salesEntries);
             }
 
-            // Receitas de contas a receber
+            // Receitas de contas a receber (apenas as que NÃO são de vendas)
             if (!$type || $type === 'income') {
                 $receivablesEntries = AccountsReceivable::where('status', 'paid')
                     ->whereNotNull('payment_date')
+                    ->whereNull('sale_id') // Evitar dupla contagem com vendas
                     ->whereBetween('payment_date', [$startDate, $endDate])
                     ->get()
                     ->map(function ($receivable) {
                         return [
                             'id' => 'receivable_' . $receivable->id,
-                            'date' => $receivable->payment_date->format('Y-m-d'),
+                            'date' => $this->formatDate($receivable->payment_date),
                             'description' => $receivable->description,
                             'type' => 'income',
                             'amount' => (float) $receivable->original_amount,
@@ -75,7 +89,7 @@ class CashFlowController extends Controller
                     ->map(function ($payable) {
                         return [
                             'id' => 'payable_' . $payable->id,
-                            'date' => $payable->payment_date->format('Y-m-d'),
+                            'date' => $this->formatDate($payable->payment_date),
                             'description' => $payable->description . " - {$payable->supplier_name}",
                             'type' => 'expense',
                             'amount' => (float) $payable->original_amount,
@@ -113,7 +127,7 @@ class CashFlowController extends Controller
             $endDate = $request->end_date ? Carbon::parse($request->end_date) : now()->endOfMonth();
             $type = $request->type; // 'income', 'expense', or null for all
 
-            // Receitas do período
+            // Receitas do período - evitar dupla contagem
             $salesIncome = 0;
             $receivablesIncome = 0;
             if (!$type || $type === 'income') {
@@ -121,8 +135,10 @@ class CashFlowController extends Controller
                     ->where('status', 'completed')
                     ->sum('total_amount') ?? 0;
 
+                // Apenas contas a receber que NÃO são de vendas (para evitar dupla contagem)
                 $receivablesIncome = AccountsReceivable::where('status', 'paid')
                     ->whereNotNull('payment_date')
+                    ->whereNull('sale_id') // Apenas contas que não são de vendas
                     ->whereBetween('payment_date', [$startDate, $endDate])
                     ->sum('original_amount') ?? 0;
             }
@@ -138,12 +154,17 @@ class CashFlowController extends Controller
                     ->sum('original_amount') ?? 0;
             }
 
-            // Totais gerais
+            // Totais gerais - evitar dupla contagem
             $totalSalesIncome = 0;
             $totalReceivablesIncome = 0;
             if (!$type || $type === 'income') {
+                // Apenas vendas concluídas (já incluem o dinheiro recebido)
                 $totalSalesIncome = Sale::where('status', 'completed')->sum('total_amount') ?? 0;
-                $totalReceivablesIncome = AccountsReceivable::where('status', 'paid')->whereNotNull('payment_date')->sum('original_amount') ?? 0;
+                // Apenas contas a receber que NÃO são de vendas (para evitar dupla contagem)
+                $totalReceivablesIncome = AccountsReceivable::where('status', 'paid')
+                    ->whereNotNull('payment_date')
+                    ->whereNull('sale_id') // Apenas contas que não são de vendas
+                    ->sum('original_amount') ?? 0;
             }
 
             $totalExpense = 0;
@@ -301,7 +322,7 @@ class CashFlowController extends Controller
                 ->get()
                 ->map(function ($receivable) {
                     return [
-                        'date' => $receivable->due_date,
+                        'date' => $this->formatDate($receivable->due_date),
                         'description' => "Recebimento: {$receivable->description}",
                         'type' => 'income',
                         'amount' => $receivable->remaining_amount,
@@ -316,7 +337,7 @@ class CashFlowController extends Controller
                 ->get()
                 ->map(function ($payable) {
                     return [
-                        'date' => $payable->due_date,
+                        'date' => $this->formatDate($payable->due_date),
                         'description' => "Pagamento: {$payable->description}",
                         'type' => 'expense',
                         'amount' => $payable->remaining_amount,
@@ -371,5 +392,73 @@ class CashFlowController extends Controller
                 'message' => 'Erro ao exportar dados: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Debug financeiro - método temporário para analisar inconsistências
+     */
+    public function debug(Request $request): JsonResponse
+    {
+        try {
+            // Dados das vendas
+            $salesTotal = Sale::where('status', 'completed')->sum('total_amount');
+            $salesCount = Sale::where('status', 'completed')->count();
+            $salesThisMonth = Sale::whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->where('status', 'completed')
+                ->sum('total_amount');
+
+            // Dados de contas a receber
+            $receivablesTotal = AccountsReceivable::sum('original_amount');
+            $receivablesPaid = AccountsReceivable::where('status', 'paid')->sum('original_amount');
+            $receivablesPaidNotFromSales = AccountsReceivable::where('status', 'paid')->whereNull('sale_id')->sum('original_amount');
+            $receivablesPending = AccountsReceivable::where('status', '!=', 'paid')->sum('remaining_amount');
+
+            // Dados de contas a pagar
+            $payablesTotal = AccountsPayable::sum('original_amount');
+            $payablesPaid = AccountsPayable::where('status', 'paid')->sum('original_amount');
+            $payablesPending = AccountsPayable::where('status', '!=', 'paid')->sum('remaining_amount');
+
+            // Cálculos do fluxo de caixa (corrigido para evitar dupla contagem)
+            $totalIncome = $salesTotal + $receivablesPaidNotFromSales;
+            $balance = $totalIncome - $payablesPaid;
+
+            return response()->json([
+                'sales' => [
+                    'total_completed' => (float) $salesTotal,
+                    'count_completed' => $salesCount,
+                    'this_month' => (float) $salesThisMonth
+                ],
+                'accounts_receivable' => [
+                    'total' => (float) $receivablesTotal,
+                    'paid' => (float) $receivablesPaid,
+                    'paid_not_from_sales' => (float) $receivablesPaidNotFromSales,
+                    'pending' => (float) $receivablesPending
+                ],
+                'accounts_payable' => [
+                    'total' => (float) $payablesTotal,
+                    'paid' => (float) $payablesPaid,
+                    'pending' => (float) $payablesPending
+                ],
+                'calculated' => [
+                    'total_income' => (float) $totalIncome,
+                    'balance' => (float) $balance,
+                    'net_pending' => (float) ($receivablesPending - $payablesPending)
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Erro no debug: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Log de dados recebidos do frontend
+     */
+    public function logFrontendData(Request $request): JsonResponse
+    {
+        Log::info('Frontend Data:', $request->all());
+        return response()->json(['logged' => true]);
     }
 }

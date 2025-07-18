@@ -47,15 +47,34 @@ class AccountsPayableController extends Controller
 
             $payables = $query->orderBy('due_date', 'asc')->get();
 
-            // Adicionar informações formatadas para compatibilidade com frontend
-            $payables->transform(function ($payable) {
-                $payable->amount = (float) $payable->original_amount;
-                return $payable;
+            // Formatar dados para compatibilidade com frontend
+            $formattedPayables = $payables->map(function ($payable) {
+                return [
+                    'id' => $payable->id,
+                    'supplier_name' => $payable->supplier_name,
+                    'description' => $payable->description,
+                    'amount' => (float) $payable->original_amount,
+                    'due_date' => $payable->due_date,
+                    'status' => $payable->status,
+                    'payment_date' => $payable->payment_date,
+                    'category' => $payable->category ?? 'Outros',
+                    'created_at' => $payable->created_at,
+                    'updated_at' => $payable->updated_at,
+                    'supplier_document' => $payable->supplier_document,
+                    'document_number' => $payable->document_number,
+                    'remaining_amount' => (float) $payable->remaining_amount,
+                    'original_amount' => (float) $payable->original_amount,
+                    'issue_date' => $payable->issue_date,
+                    'type' => $payable->type,
+                    'notes' => $payable->notes,
+                    'interest_amount' => (float) $payable->interest_amount,
+                    'discount_amount' => (float) $payable->discount_amount,
+                ];
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $payables
+                'data' => $formattedPayables
             ]);
 
         } catch (\Exception $e) {
@@ -315,7 +334,7 @@ class AccountsPayableController extends Controller
 
             return response()->json([
                 'success' => true,
-                'total' => $total
+                'total' => (float) $total
             ]);
 
         } catch (\Exception $e) {
