@@ -272,7 +272,10 @@ class AccountsReceivableController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'payment_amount' => 'nullable|numeric|min:0.01',
-                'payment_date' => 'nullable|date'
+                'payment_date' => 'nullable|date',
+                'discount_amount' => 'nullable|numeric|min:0',
+                'interest_amount' => 'nullable|numeric|min:0',
+                'notes' => 'nullable|string|max:1000'
             ]);
 
             if ($validator->fails()) {
@@ -284,29 +287,65 @@ class AccountsReceivableController extends Controller
             }
 
             $paymentAmount = $request->payment_amount ?? $accountsReceivable->remaining_amount;
+            $discountAmount = $request->discount_amount ?? 0;
+            $interestAmount = $request->interest_amount ?? 0;
             $paymentDate = $request->payment_date ?? now();
+            $notes = $request->notes;
+
+            // Validações de negócio
+            if ($discountAmount > $accountsReceivable->remaining_amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O desconto não pode ser maior que o valor a receber'
+                ], 422);
+            }
+
+            // Calcular o valor efetivo recebido considerando desconto e juros
+            $effectiveAmount = $paymentAmount - $discountAmount + $interestAmount;
+            
+            // Validação: valor total não pode ser negativo
+            if ($effectiveAmount < 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'O valor efetivo do recebimento não pode ser negativo'
+                ], 422);
+            }
+
+            // Atualizar remaining_amount baseado no valor efetivo
+            $newRemainingAmount = max(0, $accountsReceivable->remaining_amount - $effectiveAmount);
+            
+            // Determinar status
+            $newStatus = 'partial';
+            if ($newRemainingAmount <= 0) {
+                $newStatus = 'paid';
+                $newRemainingAmount = 0;
+            }
 
             $accountsReceivable->update([
-                'remaining_amount' => max(0, $accountsReceivable->remaining_amount - $paymentAmount),
-                'status' => $paymentAmount >= $accountsReceivable->remaining_amount ? 'paid' : 'partial',
-                'payment_date' => $paymentDate
+                'remaining_amount' => $newRemainingAmount,
+                'status' => $newStatus,
+                'payment_date' => $paymentDate,
+                'notes' => $notes
             ]);
-
-            // Se foi pago completamente, marcar como pago
-            if ($accountsReceivable->remaining_amount <= 0) {
-                $accountsReceivable->update(['status' => 'paid']);
-            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Pagamento registrado com sucesso',
-                'data' => $accountsReceivable->fresh()
+                'message' => 'Recebimento registrado com sucesso',
+                'data' => [
+                    'accounts_receivable' => $accountsReceivable->fresh(),
+                    'payment_details' => [
+                        'payment_amount' => $paymentAmount,
+                        'discount_amount' => $discountAmount,
+                        'interest_amount' => $interestAmount,
+                        'effective_amount' => $effectiveAmount
+                    ]
+                ]
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao registrar pagamento: ' . $e->getMessage()
+                'message' => 'Erro ao registrar recebimento: ' . $e->getMessage()
             ], 500);
         }
     }

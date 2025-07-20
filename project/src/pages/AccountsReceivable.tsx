@@ -60,6 +60,9 @@ const AccountsReceivable: React.FC = () => {
   const [payingReceivable, setPayingReceivable] = useState<AccountReceivable | null>(null);
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<string>('0');
+  const [interestAmount, setInterestAmount] = useState<string>('0');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [newReceivable, setNewReceivable] = useState<NewReceivable>({
     client_name: '',
     description: '',
@@ -148,23 +151,78 @@ const AccountsReceivable: React.FC = () => {
     setPayingReceivable(receivable);
     setPaymentAmount(receivable.remaining_amount.toString());
     setPaymentDate(new Date().toISOString().split('T')[0]);
+    setDiscountAmount('0');
+    setInterestAmount('0');
+    setPaymentNotes('');
     setShowPaymentModal(true);
+  };
+
+  const validatePayment = () => {
+    if (!payingReceivable) return false;
+
+    const originalAmount = payingReceivable.remaining_amount;
+    const payment = parseFloat(paymentAmount) || 0;
+    const discount = parseFloat(discountAmount) || 0;
+    const interest = parseFloat(interestAmount) || 0;
+    
+    // Validação básica
+    if (payment <= 0) {
+      alert('O valor do recebimento deve ser maior que zero.');
+      return false;
+    }
+
+    // Validação: desconto não pode ser maior que o valor a receber
+    if (discount > originalAmount) {
+      alert('O desconto não pode ser maior que o valor a receber.');
+      return false;
+    }
+
+    // Validação: juros não pode fazer o total ultrapassar 300% do valor original
+    const totalWithInterest = payment + interest - discount;
+    const maxAllowedTotal = originalAmount * 3; // 300% do valor original
+
+    if (totalWithInterest > maxAllowedTotal) {
+      alert(`O valor total com juros (R$ ${totalWithInterest.toFixed(2)}) não pode ultrapassar 300% do valor a receber (R$ ${maxAllowedTotal.toFixed(2)}).`);
+      return false;
+    }
+
+    // Validação: se há juros, o valor deve ser pelo menos o valor a receber menos desconto
+    if (interest > 0) {
+      const minimumPayment = originalAmount - discount;
+      if (payment < minimumPayment) {
+        alert(`Com juros aplicados, o recebimento deve ser de pelo menos R$ ${minimumPayment.toFixed(2)} (valor a receber menos desconto).`);
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingReceivable) return;
 
+    // Validar antes de processar
+    if (!validatePayment()) return;
+
     try {
-      await api.put(`/accounts-receivable/${payingReceivable.id}/pay`, {
+      const paymentData = {
         payment_amount: parseFloat(paymentAmount),
-        payment_date: paymentDate
-      });
+        payment_date: paymentDate,
+        discount_amount: parseFloat(discountAmount) || 0,
+        interest_amount: parseFloat(interestAmount) || 0,
+        notes: paymentNotes || undefined
+      };
+
+      await api.put(`/accounts-receivable/${payingReceivable.id}/pay`, paymentData);
       
       setShowPaymentModal(false);
       setPayingReceivable(null);
       setPaymentAmount('');
       setPaymentDate(new Date().toISOString().split('T')[0]);
+      setDiscountAmount('0');
+      setInterestAmount('0');
+      setPaymentNotes('');
       loadReceivables();
     } catch (error) {
       console.error('Erro ao registrar pagamento:', error);
@@ -217,6 +275,8 @@ const AccountsReceivable: React.FC = () => {
         return 'bg-green-100 text-green-800';
       case 'overdue':
         return 'bg-red-100 text-red-800';
+      case 'partial':
+        return 'bg-blue-100 text-blue-800';
       default:
         return 'bg-yellow-100 text-yellow-800';
     }
@@ -228,6 +288,8 @@ const AccountsReceivable: React.FC = () => {
         return 'Pago';
       case 'overdue':
         return 'Vencido';
+      case 'partial':
+        return 'Parcial';
       default:
         return 'Pendente';
     }
@@ -268,7 +330,7 @@ const AccountsReceivable: React.FC = () => {
         </div>
 
         {/* Cards de Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -300,6 +362,17 @@ const AccountsReceivable: React.FC = () => {
                 </p>
               </div>
               <X className="w-8 h-8 text-red-500" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Parcial</p>
+                <p className="text-xl font-bold text-blue-600">
+                  R$ {getTotalByStatus('partial').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <Calendar className="w-8 h-8 text-blue-500" />
             </div>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
@@ -339,6 +412,7 @@ const AccountsReceivable: React.FC = () => {
             <option value="all">Todos os Status</option>
             <option value="pending">Pendente</option>
             <option value="overdue">Vencido</option>
+            <option value="partial">Parcial</option>
             <option value="paid">Pago</option>
           </select>
         </div>
@@ -404,11 +478,11 @@ const AccountsReceivable: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
-                      {item.status === 'pending' && (
+                      {item.status !== 'paid' && (
                         <button
                           onClick={() => markAsPaid(item)}
                           className="text-green-600 hover:text-green-900"
-                          title="Marcar como Pago"
+                          title="Informar Recebimento"
                         >
                           <Check className="w-4 h-4" />
                         </button>
@@ -719,6 +793,81 @@ const AccountsReceivable: React.FC = () => {
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Desconto
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(e.target.value)}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Juros/Multa
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={interestAmount}
+                      onChange={(e) => setInterestAmount(e.target.value)}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0,00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Observações</label>
+                  <textarea
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    rows={3}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Observações sobre o recebimento (opcional)"
+                  />
+                </div>
+
+                {/* Resumo do Recebimento */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-2">Resumo do Recebimento</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Valor a Receber:</span>
+                      <span>R$ {payingReceivable.remaining_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {parseFloat(discountAmount) > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Desconto:</span>
+                        <span>- R$ {parseFloat(discountAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {parseFloat(interestAmount) > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Juros/Multa:</span>
+                        <span>+ R$ {parseFloat(interestAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <hr className="my-2" />
+                    <div className="flex justify-between font-semibold">
+                      <span>Total a Receber:</span>
+                      <span>R$ {(
+                        parseFloat(paymentAmount || '0') + 
+                        parseFloat(interestAmount || '0') - 
+                        parseFloat(discountAmount || '0')
+                      ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 mt-6">
@@ -729,6 +878,9 @@ const AccountsReceivable: React.FC = () => {
                     setPayingReceivable(null);
                     setPaymentAmount('');
                     setPaymentDate(new Date().toISOString().split('T')[0]);
+                    setDiscountAmount('0');
+                    setInterestAmount('0');
+                    setPaymentNotes('');
                   }}
                   className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
                 >

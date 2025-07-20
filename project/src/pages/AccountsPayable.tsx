@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Calendar, DollarSign, Building, FileText, Check, X, Edit3, Eye } from 'lucide-react';
 import { apiClient as api } from '../services/api';
+import MaskedInput from '../components/MaskedInput';
 
 interface AccountPayable {
   id: number;
   supplier_name: string;
+  supplier_document?: string;
   description: string;
   amount: number;
   due_date: string;
@@ -16,6 +18,7 @@ interface AccountPayable {
 
 interface NewPayable {
   supplier_name: string;
+  supplier_document: string;
   description: string;
   amount: string;
   due_date: string;
@@ -57,8 +60,12 @@ const AccountsPayable: React.FC = () => {
   const [payingPayable, setPayingPayable] = useState<AccountPayable | null>(null);
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<string>('0');
+  const [interestAmount, setInterestAmount] = useState<string>('0');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [newPayable, setNewPayable] = useState<NewPayable>({
     supplier_name: '',
+    supplier_document: '',
     description: '',
     amount: '',
     due_date: '',
@@ -66,6 +73,7 @@ const AccountsPayable: React.FC = () => {
   });
   const [editPayable, setEditPayable] = useState<NewPayable>({
     supplier_name: '',
+    supplier_document: '',
     description: '',
     amount: '',
     due_date: '',
@@ -140,6 +148,7 @@ const AccountsPayable: React.FC = () => {
       
       setNewPayable({
         supplier_name: '',
+        supplier_document: '',
         description: '',
         amount: '',
         due_date: '',
@@ -156,23 +165,78 @@ const AccountsPayable: React.FC = () => {
     setPayingPayable(payable);
     setPaymentAmount(payable.amount.toString());
     setPaymentDate(new Date().toISOString().split('T')[0]);
+    setDiscountAmount('0');
+    setInterestAmount('0');
+    setPaymentNotes('');
     setShowPaymentModal(true);
+  };
+
+  const validatePayment = () => {
+    if (!payingPayable) return false;
+
+    const originalAmount = payingPayable.amount;
+    const payment = parseFloat(paymentAmount) || 0;
+    const discount = parseFloat(discountAmount) || 0;
+    const interest = parseFloat(interestAmount) || 0;
+    
+    // Validação básica
+    if (payment <= 0) {
+      alert('O valor do pagamento deve ser maior que zero.');
+      return false;
+    }
+
+    // Validação: desconto não pode ser maior que o valor original
+    if (discount > originalAmount) {
+      alert('O desconto não pode ser maior que o valor original da conta.');
+      return false;
+    }
+
+    // Validação: juros não pode fazer o total ultrapassar 300% do valor original
+    const totalWithInterest = payment + interest - discount;
+    const maxAllowedTotal = originalAmount * 3; // 300% do valor original
+
+    if (totalWithInterest > maxAllowedTotal) {
+      alert(`O valor total com juros (R$ ${totalWithInterest.toFixed(2)}) não pode ultrapassar 300% do valor original (R$ ${maxAllowedTotal.toFixed(2)}).`);
+      return false;
+    }
+
+    // Validação: se há juros, o valor deve ser pelo menos o valor original menos desconto
+    if (interest > 0) {
+      const minimumPayment = originalAmount - discount;
+      if (payment < minimumPayment) {
+        alert(`Com juros aplicados, o pagamento deve ser de pelo menos R$ ${minimumPayment.toFixed(2)} (valor original menos desconto).`);
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingPayable) return;
 
+    // Validar antes de processar
+    if (!validatePayment()) return;
+
     try {
-      await api.put(`/accounts-payable/${payingPayable.id}/pay`, {
+      const paymentData = {
         payment_amount: parseFloat(paymentAmount),
-        payment_date: paymentDate
-      });
+        payment_date: paymentDate,
+        discount_amount: parseFloat(discountAmount) || 0,
+        interest_amount: parseFloat(interestAmount) || 0,
+        notes: paymentNotes || undefined
+      };
+
+      await api.put(`/accounts-payable/${payingPayable.id}/pay`, paymentData);
       
       setShowPaymentModal(false);
       setPayingPayable(null);
       setPaymentAmount('');
       setPaymentDate(new Date().toISOString().split('T')[0]);
+      setDiscountAmount('0');
+      setInterestAmount('0');
+      setPaymentNotes('');
       loadPayables();
     } catch (error) {
       console.error('Erro ao registrar pagamento:', error);
@@ -183,6 +247,7 @@ const AccountsPayable: React.FC = () => {
     setEditingPayable(payable);
     setEditPayable({
       supplier_name: payable.supplier_name,
+      supplier_document: payable.supplier_document || '',
       description: payable.description,
       amount: payable.amount.toString(),
       due_date: payable.due_date.split('T')[0], // Remove o horário se houver
@@ -208,6 +273,7 @@ const AccountsPayable: React.FC = () => {
       
       setEditPayable({
         supplier_name: '',
+        supplier_document: '',
         description: '',
         amount: '',
         due_date: '',
@@ -445,11 +511,11 @@ const AccountsPayable: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        {item.status === 'pending' && (
+                        {(item.status === 'pending' || item.status === 'overdue') && (
                           <button
                             onClick={() => markAsPaid(item)}
                             className="text-green-600 hover:text-green-900"
-                            title="Marcar como Pago"
+                            title="Informar Pagamento"
                           >
                             <Check className="w-4 h-4" />
                           </button>
@@ -497,6 +563,18 @@ const AccountsPayable: React.FC = () => {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CPF/CNPJ do Fornecedor
+                </label>
+                <MaskedInput
+                  type={newPayable.supplier_document.length > 14 ? "cnpj" : "cpf"}
+                  value={newPayable.supplier_document}
+                  onChange={(value) => setNewPayable({ ...newPayable, supplier_document: value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Descrição
                 </label>
                 <input
@@ -534,6 +612,7 @@ const AccountsPayable: React.FC = () => {
                   value={newPayable.amount}
                   onChange={(e) => setNewPayable({ ...newPayable, amount: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0,00"
                 />
               </div>
               <div className="mb-6">
@@ -584,6 +663,18 @@ const AccountsPayable: React.FC = () => {
                   value={editPayable.supplier_name}
                   onChange={(e) => setEditPayable({ ...editPayable, supplier_name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CPF/CNPJ do Fornecedor
+                </label>
+                <MaskedInput
+                  type={editPayable.supplier_document.length > 14 ? "cnpj" : "cpf"}
+                  value={editPayable.supplier_document}
+                  onChange={(value) => setEditPayable({ ...editPayable, supplier_document: value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
                 />
               </div>
               <div className="mb-4">
@@ -734,55 +825,166 @@ const AccountsPayable: React.FC = () => {
       {/* Modal de Pagamento */}
       {showPaymentModal && payingPayable && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">Registrar Pagamento</h3>
+          <div className="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Registrar Pagamento</h3>
+              <button
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setPayingPayable(null);
+                  setPaymentAmount('');
+                  setPaymentDate(new Date().toISOString().split('T')[0]);
+                  setDiscountAmount('0');
+                  setInterestAmount('0');
+                  setPaymentNotes('');
+                }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
             
             <form onSubmit={handlePayment}>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Conta:</label>
-                  <p className="mt-1 text-gray-900 text-sm bg-gray-50 p-2 rounded">
-                    {payingPayable.description}
-                  </p>
+                {/* Informações da Conta */}
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Conta:</label>
+                    <p className="mt-1 text-gray-900 text-sm">
+                      {payingPayable.description}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Fornecedor:</label>
+                    <p className="mt-1 text-gray-900 text-sm">
+                      {payingPayable.supplier_name}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Valor Original:</label>
+                    <p className="mt-1 text-gray-900 text-sm font-semibold">
+                      R$ {payingPayable.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Vencimento:</label>
+                    <p className="mt-1 text-gray-900 text-sm">
+                      {formatDate(payingPayable.due_date)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Dados do Pagamento */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Valor do Pagamento *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={payingPayable.amount}
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data do Pagamento *
+                    </label>
+                    <input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Desconto
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Juros/Multa
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={interestAmount}
+                      onChange={(e) => setInterestAmount(e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0,00"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Fornecedor:</label>
-                  <p className="mt-1 text-gray-900 text-sm bg-gray-50 p-2 rounded">
-                    {payingPayable.supplier_name}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Valor a Pagar:</label>
-                  <p className="mt-1 text-gray-900 text-sm bg-gray-50 p-2 rounded">
-                    R$ {payingPayable.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Valor do Pagamento:</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    max={payingPayable.amount}
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observações
+                  </label>
+                  <textarea
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    rows={3}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Observações sobre o pagamento (opcional)"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Data do Pagamento:</label>
-                  <input
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
+                {/* Resumo do Pagamento */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-2">Resumo do Pagamento</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Valor Original:</span>
+                      <span>R$ {payingPayable.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {parseFloat(discountAmount) > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Desconto:</span>
+                        <span>- R$ {parseFloat(discountAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {parseFloat(interestAmount) > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Juros/Multa:</span>
+                        <span>+ R$ {parseFloat(interestAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <hr className="my-2" />
+                    <div className="flex justify-between font-semibold">
+                      <span>Total a Pagar:</span>
+                      <span>R$ {(
+                        parseFloat(paymentAmount || '0') + 
+                        parseFloat(interestAmount || '0') - 
+                        parseFloat(discountAmount || '0')
+                      ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -794,15 +996,19 @@ const AccountsPayable: React.FC = () => {
                     setPayingPayable(null);
                     setPaymentAmount('');
                     setPaymentDate(new Date().toISOString().split('T')[0]);
+                    setDiscountAmount('0');
+                    setInterestAmount('0');
+                    setPaymentNotes('');
                   }}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
                 >
+                  <Check className="h-4 w-4" />
                   Registrar Pagamento
                 </button>
               </div>

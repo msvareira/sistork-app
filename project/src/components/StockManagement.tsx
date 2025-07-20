@@ -8,9 +8,9 @@ import {
   Edit, 
   Trash2, 
   Package,
-  DollarSign,
   AlertTriangle,
-  X
+  X,
+  Eye
 } from 'lucide-react';
 import { LoadingButton, LoadingCard } from './LoadingComponents';
 
@@ -20,6 +20,8 @@ export default function StockManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingPart, setViewingPart] = useState<Part | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -89,6 +91,11 @@ export default function StockManagement() {
         error('Erro ao excluir', 'Não foi possível excluir a peça. Tente novamente.');
       }
     }
+  };
+
+  const handleView = (part: Part) => {
+    setViewingPart(part);
+    setShowViewModal(true);
   };
 
   return (
@@ -269,9 +276,18 @@ export default function StockManagement() {
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => handleEdit(part)}
+                    onClick={() => handleView(part)}
                     disabled={loadingStates.operations}
                     className="text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Visualizar"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleEdit(part)}
+                    disabled={loadingStates.operations}
+                    className="text-gray-600 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Editar"
                   >
                     <Edit className="h-4 w-4" />
                   </button>
@@ -279,6 +295,7 @@ export default function StockManagement() {
                     onClick={() => handleDelete(part.id)}
                     disabled={loadingStates.operations}
                     className="text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Excluir"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -326,6 +343,115 @@ export default function StockManagement() {
         })}
       </div>
       </>
+    )}
+
+    {/* Modal de Visualização */}
+    {showViewModal && viewingPart && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Detalhes da Peça</h3>
+            <button
+              onClick={() => {
+                setShowViewModal(false);
+                setViewingPart(null);
+              }}
+              className="text-gray-400 hover:text-gray-500"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Nome da Peça</label>
+              <p className="mt-1 text-gray-900">{viewingPart.name}</p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Código Interno</label>
+              <p className="mt-1 text-gray-900 font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                {viewingPart.internalCode}
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Quantidade em Estoque</label>
+                <p className={`mt-1 font-semibold ${viewingPart.quantity < 5 ? 'text-red-600' : 'text-green-600'}`}>
+                  {viewingPart.quantity} {viewingPart.quantity < 5 && '⚠️ Estoque baixo'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Status</label>
+                <p className={`mt-1 font-medium ${viewingPart.quantity === 0 ? 'text-red-600' : viewingPart.quantity < 5 ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {viewingPart.quantity === 0 ? 'Sem estoque' : viewingPart.quantity < 5 ? 'Estoque baixo' : 'Em estoque'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Preço de Custo</label>
+                <p className="mt-1 text-gray-900">R$ {viewingPart.costPrice.toFixed(2)}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Preço de Venda</label>
+                <p className="mt-1 text-green-600 font-semibold">R$ {viewingPart.sellPrice.toFixed(2)}</p>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Margem de Lucro</label>
+              <p className="mt-1 font-semibold">
+                {(() => {
+                  const margin = viewingPart.sellPrice - viewingPart.costPrice;
+                  const marginPercent = viewingPart.costPrice > 0 ? (margin / viewingPart.costPrice) * 100 : 0;
+                  return (
+                    <span className={marginPercent > 0 ? 'text-green-600' : 'text-red-600'}>
+                      R$ {margin.toFixed(2)} ({marginPercent.toFixed(1)}%)
+                    </span>
+                  );
+                })()}
+              </p>
+            </div>
+            
+            {viewingPart.supplier && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Fornecedor</label>
+                <p className="mt-1 text-gray-900">{viewingPart.supplier}</p>
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Data de Cadastro</label>
+              <p className="mt-1 text-gray-900">
+                {new Date(viewingPart.createdAt || Date.now()).toLocaleDateString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex justify-end mt-6">
+            <button
+              onClick={() => {
+                setShowViewModal(false);
+                setViewingPart(null);
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </div>
 );

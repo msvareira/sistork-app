@@ -1,6 +1,24 @@
-# SisTork - Sistema de Gestão para Oficina de Motos
+# 🏍️ SisTork v1.0.0 - Sistema de Gestão para Oficina de Motos
 
-Sistema completo de gestão para oficina de motos e motopeças, desenvolvido com Laravel (Backend) e React (Frontend).
+> **Sistema completo e profissional para gestão de oficinas de motos e motopeças**
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/msvareira/sistork-app)
+[![Laravel](https://img.shields.io/badge/Laravel-11-red.svg)](https://laravel.com)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)](https://www.typescriptlang.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com)
+
+**SisTork** é uma solução completa para gestão de oficinas de motos, oferecendo controle financeiro, estoque, clientes, orçamentos e PDV em uma interface moderna e intuitiva.
+
+## ✨ Principais Funcionalidades
+
+- 💰 **Gestão Financeira** - Contas a pagar/receber com juros e descontos
+- 👥 **Gestão de Clientes** - Cadastro completo com máscaras automáticas  
+- 📦 **Controle de Estoque** - Peças e alertas de estoque mínimo
+- 📋 **Sistema de Orçamentos** - Criação e aprovação com WhatsApp
+- 💻 **PDV Integrado** - Vendas rápidas com impressão de cupons
+- 📊 **Dashboard e Relatórios** - Analytics em tempo real
+- 🎨 **Interface Responsiva** - Funciona em desktop, tablet e mobile
 
 ## 🚀 Início Rápido
 

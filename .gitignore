@@ -1,0 +1,67 @@
+# === DEPENDÊNCIAS (MAIOR REDUÇÃO DE ARQUIVOS) ===
+node_modules/
+vendor/
+
+# === BUILD E DIST ===
+dist/
+build/
+.next/
+coverage/
+out/
+
+# === CACHE E LOGS ===
+*.log
+*.cache
+.DS_Store
+Thumbs.db
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+bootstrap/cache/
+
+# === AMBIENTE ===
+.env*
+!.env.example
+
+# === IDEs ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === DOCKER ===
+.docker/
+
+# === ARQUIVOS TEMPORÁRIOS ===
+*.tmp
+*.temp
+
+# === ARQUIVOS DE LOCK ===
+package-lock.json
+composer.lock
+yarn.lock
+pnpm-lock.yaml
+
+# === ASSETS GRANDES ===
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.ico
+*.mp4
+*.avi
+*.pdf
+
+# === TESTES E COVERAGE ===
+coverage/
+.nyc_output/
+phpunit.result.cache
+
+# === OUTROS ===
+.git/
+*.pid
+*.seed
+*.pid.lock

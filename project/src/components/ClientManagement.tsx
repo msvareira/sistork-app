@@ -9,10 +9,10 @@ import {
   Trash2, 
   Phone, 
   Car,
-  FileText,
   X
 } from 'lucide-react';
 import { LoadingButton, LoadingCard } from './LoadingComponents';
+import MaskedInput from './MaskedInput';
 
 export default function ClientManagement() {
   // Função para formatar data corretamente (evita problema de fuso horário)
@@ -177,11 +177,11 @@ export default function ClientManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Telefone
                 </label>
-                <input
-                  type="tel"
+                <MaskedInput
+                  type="phone"
                   required
                   value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  onChange={(value) => setFormData({...formData, phone: value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -203,11 +203,11 @@ export default function ClientManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Placa
                 </label>
-                <input
-                  type="text"
+                <MaskedInput
+                  type="plate"
                   required
                   value={formData.licensePlate}
-                  onChange={(e) => setFormData({...formData, licensePlate: e.target.value})}
+                  onChange={(value) => setFormData({...formData, licensePlate: value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>

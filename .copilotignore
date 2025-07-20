@@ -1,0 +1,92 @@
+# Diretórios grandes que consomem muitos recursos
+node_modules/
+vendor/
+dist/
+build/
+.next/
+coverage/
+storage/
+
+# Arquivos de dependências (não precisam de análise)
+package-lock.json
+composer.lock
+yarn.lock
+pnpm-lock.yaml
+
+# Arquivos de configuração desnecessários
+.env*
+.git/
+.vscode/
+.idea/
+.docker/
+
+# Logs e cache
+*.log
+*.cache
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+bootstrap/cache/
+
+# Docker (não precisa de contexto de código)
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
+
+# Arquivos de build e temporários
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Arquivos de mídia e assets
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.ico
+*.mp4
+*.avi
+*.pdf
+
+# Documentação (reduz arquivos processados)
+README*.md
+CHANGELOG*.md
+LICENSE*
+docs/
+*.md
+
+# Testes (se não precisar de contexto frequente)
+tests/
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+phpunit.xml
+
+# Arquivos específicos do projeto Laravel
+back/storage/
+back/public/
+back/bootstrap/cache/
+project/public/
+
+# Arquivos de configuração que não mudam
+*.config.js
+*.config.ts
+vite.config.*
+postcss.config.*
+tailwind.config.*
+eslint.config.*
+tsconfig.*
+
+# Arquivos do sistema
+.htaccess
+robots.txt
+favicon.ico

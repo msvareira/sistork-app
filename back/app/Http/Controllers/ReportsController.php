@@ -48,42 +48,45 @@ class ReportsController extends Controller
     public function sales(Request $request): JsonResponse
     {
         try {
-            $startDate = $request->start_date ? Carbon::parse($request->start_date) : now()->startOfMonth();
-            $endDate = $request->end_date ? Carbon::parse($request->end_date) : now()->endOfMonth();
+            $period = $request->period ?? 'current_month';
+            $dates = $this->getPeriodDates($period, $request->start_date, $request->end_date);
 
-            // Vendas por período
             $sales = Sale::with(['client', 'items.part'])
-                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereBetween('created_at', [$dates['start'], $dates['end']])
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            // Estatísticas
-            $stats = [
-                'totalSales' => $sales->count(),
-                'totalRevenue' => $sales->sum('total_amount'),
-                'averageTicket' => $sales->count() > 0 ? $sales->sum('total_amount') / $sales->count() : 0,
-                'completedSales' => $sales->where('status', 'completed')->count(),
-                'pendingSales' => $sales->where('status', 'pending')->count(),
-                'cancelledSales' => $sales->where('status', 'cancelled')->count()
-            ];
-
-            // Vendas por dia
-            $dailySales = $sales->groupBy(function ($sale) {
-                return $sale->created_at->format('Y-m-d');
-            })->map(function ($daySales) {
+            $salesData = $sales->map(function ($sale) {
                 return [
-                    'count' => $daySales->count(),
-                    'total' => $daySales->sum('total_amount')
+                    'id' => $sale->id,
+                    'sale_number' => $sale->sale_number,
+                    'client_name' => $sale->client->name ?? 'Cliente não informado',
+                    'total_amount' => (float) $sale->total_amount,
+                    'items_count' => $sale->items->count(),
+                    'status' => $sale->status,
+                    'created_at' => $sale->created_at->format('Y-m-d H:i:s'),
+                    'items' => $sale->items->map(function ($item) {
+                        return [
+                            'part_name' => $item->part->name ?? 'Item não encontrado',
+                            'quantity' => (int) $item->quantity,
+                            'unit_price' => (float) $item->unit_price,
+                            'total_price' => (float) $item->total_price
+                        ];
+                    })
                 ];
             });
 
+            $summary = [
+                'total_sales' => $sales->count(),
+                'total_revenue' => (float) $sales->sum('total_amount'),
+                'average_sale' => $sales->count() > 0 ? (float) $sales->avg('total_amount') : 0,
+                'period_start' => $dates['start']->format('d/m/Y'),
+                'period_end' => $dates['end']->format('d/m/Y')
+            ];
+
             return response()->json([
-                'success' => true,
-                'data' => [
-                    'sales' => $sales,
-                    'stats' => $stats,
-                    'dailySales' => $dailySales
-                ]
+                'sales' => $salesData,
+                'summary' => $summary
             ]);
 
         } catch (\Exception $e) {
@@ -100,68 +103,65 @@ class ReportsController extends Controller
     public function financial(Request $request): JsonResponse
     {
         try {
-            $startDate = $request->start_date ? Carbon::parse($request->start_date) : now()->startOfMonth();
-            $endDate = $request->end_date ? Carbon::parse($request->end_date) : now()->endOfMonth();
+            $period = $request->period ?? 'current_month';
+            $dates = $this->getPeriodDates($period, $request->start_date, $request->end_date);
 
-            // Receitas
-            $salesRevenue = Sale::whereBetween('created_at', [$startDate, $endDate])
-                ->where('status', 'completed')
-                ->sum('total_amount');
+        // Receitas (vendas + contas recebidas)
+        $salesRevenue = Sale::whereBetween('created_at', [$dates['start'], $dates['end']])
+            ->sum('total_amount');
 
-            $receivablesRevenue = AccountsReceivable::whereBetween('payment_date', [$startDate, $endDate])
-                ->where('status', 'paid')
-                ->whereNotNull('payment_date')
-                ->sum('amount');
+        $receivedPayments = AccountsReceivable::where('status', 'paid')
+            ->whereBetween('payment_date', [$dates['start'], $dates['end']])
+            ->sum('remaining_amount');
 
-            $totalRevenue = $salesRevenue + $receivablesRevenue;
+        // Despesas (contas pagas)
+        $expenses = AccountsPayable::where('status', 'paid')
+            ->whereBetween('payment_date', [$dates['start'], $dates['end']])
+            ->sum('remaining_amount');
 
-            // Despesas
-            $totalExpenses = AccountsPayable::whereBetween('issue_date', [$startDate, $endDate])
-                ->sum('original_amount');
+        // Contas pendentes
+        $pendingReceivables = AccountsReceivable::where('status', 'pending')
+            ->sum('remaining_amount');
 
-            $paidExpenses = AccountsPayable::where('status', 'paid')
-                ->whereBetween('updated_at', [$startDate, $endDate])
-                ->sum('original_amount');
+        $pendingPayables = AccountsPayable::where('status', 'pending')
+            ->sum('remaining_amount');
 
-            // Contas a receber
-            $pendingReceivables = AccountsReceivable::where('status', '!=', 'paid')
-                ->sum('remaining_amount');
+            // Fluxo de caixa mensal
+            $monthlyFlow = [];
+            $currentDate = $dates['start']->copy();
+            while ($currentDate <= $dates['end']) {
+                $monthStart = $currentDate->copy()->startOfMonth();
+                $monthEnd = $currentDate->copy()->endOfMonth();
 
-            $overdueReceivables = AccountsReceivable::where('status', 'overdue')
-                ->sum('remaining_amount');
+                $monthRevenue = Sale::whereBetween('created_at', [$monthStart, $monthEnd])
+                    ->sum('total_amount');
 
-            // Contas a pagar
-            $pendingPayables = AccountsPayable::where('status', '!=', 'paid')
-                ->sum('remaining_amount');
+                $monthExpenses = AccountsPayable::where('status', 'paid')
+                    ->whereBetween('payment_date', [$monthStart, $monthEnd])
+                    ->sum('remaining_amount');
 
-            $overduePayables = AccountsPayable::where('status', 'overdue')
-                ->sum('remaining_amount');
+                $monthlyFlow[] = [
+                    'month' => $currentDate->format('M/Y'),
+                    'revenue' => (float) $monthRevenue,
+                    'expenses' => (float) $monthExpenses,
+                    'profit' => (float) ($monthRevenue - $monthExpenses)
+                ];
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'revenue' => [
-                        'sales' => $salesRevenue,
-                        'receivables' => $receivablesRevenue,
-                        'total' => $totalRevenue
-                    ],
-                    'expenses' => [
-                        'total' => $totalExpenses,
-                        'paid' => $paidExpenses,
-                        'pending' => $totalExpenses - $paidExpenses
-                    ],
-                    'receivables' => [
-                        'pending' => $pendingReceivables,
-                        'overdue' => $overdueReceivables
-                    ],
-                    'payables' => [
-                        'pending' => $pendingPayables,
-                        'overdue' => $overduePayables
-                    ],
-                    'netProfit' => $totalRevenue - $paidExpenses,
-                    'profitMargin' => $totalRevenue > 0 ? (($totalRevenue - $paidExpenses) / $totalRevenue) * 100 : 0
-                ]
-            ]);
+                $currentDate->addMonth();
+            }
+
+            $summary = [
+                'total_revenue' => (float) $salesRevenue,
+                'received_payments' => (float) $receivedPayments,
+                'total_expenses' => (float) $expenses,
+                'net_profit' => (float) ($salesRevenue - $expenses),
+                'pending_receivables' => (float) $pendingReceivables,
+                'pending_payables' => (float) $pendingPayables,
+                'cash_flow' => (float) ($pendingReceivables - $pendingPayables),
+                'monthly_flow' => $monthlyFlow
+            ];
+
+            return response()->json($summary);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -177,45 +177,45 @@ class ReportsController extends Controller
     public function inventory(Request $request): JsonResponse
     {
         try {
-            // Produtos com estoque baixo
-            $lowStockThreshold = $request->threshold ?? 10;
-            $lowStock = Part::where('quantity_in_stock', '<=', $lowStockThreshold)
-                ->where('quantity_in_stock', '>', 0)
-                ->orderBy('quantity_in_stock', 'asc')
-                ->get();
+            $lowStockLimit = $request->low_stock_limit ?? 10;
 
-            // Produtos sem estoque
-            $outOfStock = Part::where('quantity_in_stock', '<=', 0)->get();
+            $parts = Part::with(['saleItems' => function ($query) use ($request) {
+                if ($request->period) {
+                    $dates = $this->getPeriodDates($request->period, $request->start_date, $request->end_date);
+                    $query->whereBetween('created_at', [$dates['start'], $dates['end']]);
+                }
+            }])->get();
 
-            // Produtos mais vendidos
-            $topSelling = SaleItem::select('part_id', DB::raw('SUM(quantity) as total_sold'))
-                ->with('part')
-                ->groupBy('part_id')
-                ->orderBy('total_sold', 'desc')
-                ->take(10)
-                ->get();
+            $inventoryData = $parts->map(function ($part) use ($lowStockLimit) {
+                $totalSold = $part->saleItems->sum('quantity');
+                $revenue = $part->saleItems->sum('total_price');
 
-            // Valor total do estoque
-            $totalInventoryValue = Part::selectRaw('SUM(quantity_in_stock * cost_price) as total')
-                ->value('total') ?? 0;
+                return [
+                    'id' => $part->id,
+                    'name' => $part->name,
+                    'sku' => $part->sku ?? $part->internal_code ?? 'N/A',
+                    'current_stock' => (int) $part->quantity,
+                    'unit_price' => (float) ($part->unit_price ?? $part->sell_price ?? 0),
+                    'total_value' => (float) ($part->quantity * ($part->unit_price ?? $part->sell_price ?? 0)),
+                    'sold_quantity' => (int) $totalSold,
+                    'revenue_generated' => (float) $revenue,
+                    'status' => $part->quantity <= $lowStockLimit ? 'low_stock' : 'ok',
+                    'supplier' => $part->supplier ?? 'Não informado'
+                ];
+            });
 
-            // Estatísticas gerais
-            $stats = [
-                'totalProducts' => Part::count(),
-                'lowStockItems' => $lowStock->count(),
-                'outOfStockItems' => $outOfStock->count(),
-                'totalInventoryValue' => $totalInventoryValue,
-                'averageStockValue' => Part::count() > 0 ? $totalInventoryValue / Part::count() : 0
+            $summary = [
+                'total_items' => $parts->count(),
+                'total_stock_value' => (float) $inventoryData->sum('total_value'),
+                'low_stock_items' => $inventoryData->where('status', 'low_stock')->count(),
+                'out_of_stock_items' => $inventoryData->where('current_stock', 0)->count(),
+                'most_sold_item' => $inventoryData->sortByDesc('sold_quantity')->first(),
+                'highest_revenue_item' => $inventoryData->sortByDesc('revenue_generated')->first()
             ];
 
             return response()->json([
-                'success' => true,
-                'data' => [
-                    'stats' => $stats,
-                    'lowStock' => $lowStock,
-                    'outOfStock' => $outOfStock,
-                    'topSelling' => $topSelling
-                ]
+                'inventory' => $inventoryData->values(),
+                'summary' => $summary
             ]);
 
         } catch (\Exception $e) {
@@ -227,131 +227,132 @@ class ReportsController extends Controller
     }
 
     /**
-     * Vendas por mês
+     * Gerar relatório em PDF
+     */
+    public function pdf(Request $request): JsonResponse
+    {
+        try {
+            $type = $request->type ?? 'dashboard';
+            $period = $request->period ?? 'current_month';
+            
+            // Por enquanto, retorna um mock do PDF
+            // Aqui você pode implementar a geração real com DomPDF ou similar
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Relatório {$type} em PDF gerado com sucesso!",
+                'download_url' => "/reports/download/{$type}/" . time() . ".pdf",
+                'type' => $type,
+                'period' => $period
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Métodos privados de apoio
      */
     private function getSalesByMonth(Carbon $startDate, Carbon $endDate): array
     {
-        return Sale::selectRaw('
-                YEAR(created_at) as year, 
-                MONTH(created_at) as month, 
-                COUNT(*) as sales, 
-                SUM(total_amount) as revenue
-            ')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->where('status', 'completed')
+        $sales = Sale::whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw('YEAR(created_at) as year, MONTH(created_at) as month, COUNT(*) as sales, SUM(total_amount) as revenue')
             ->groupBy('year', 'month')
-            ->orderBy('year', 'desc')
-            ->orderBy('month', 'desc')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'month' => Carbon::create($item->year, $item->month)->format('M/Y'),
-                    'sales' => $item->sales,
-                    'revenue' => $item->revenue
-                ];
-            })
-            ->toArray();
+            ->orderBy('year')
+            ->orderBy('month')
+            ->get();
+
+        return $sales->map(function ($sale) {
+            return [
+                'month' => sprintf('%02d/%d', $sale->month, $sale->year),
+                'sales' => (int) $sale->sales,
+                'revenue' => (float) $sale->revenue
+            ];
+        })->toArray();
     }
 
-    /**
-     * Produtos mais vendidos
-     */
     private function getTopProducts(Carbon $startDate, Carbon $endDate): array
     {
-        return SaleItem::select('part_id', DB::raw('SUM(quantity) as quantity'), DB::raw('SUM(subtotal) as revenue'))
-            ->with('part')
-            ->whereHas('sale', function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('created_at', [$startDate, $endDate])
-                      ->where('status', 'completed');
-            })
+        $topProducts = SaleItem::with('part')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw('part_id, SUM(quantity) as quantity, SUM(total_price) as revenue')
             ->groupBy('part_id')
             ->orderBy('revenue', 'desc')
-            ->take(5)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'name' => $item->part ? $item->part->name : 'Produto não encontrado',
-                    'quantity' => $item->quantity,
-                    'revenue' => $item->revenue
-                ];
-            })
-            ->toArray();
+            ->limit(10)
+            ->get();
+
+        return $topProducts->map(function ($item) {
+            return [
+                'name' => $item->part->name ?? 'Produto não encontrado',
+                'quantity' => (int) $item->quantity,
+                'revenue' => (float) $item->revenue
+            ];
+        })->toArray();
     }
 
-    /**
-     * Melhores clientes
-     */
     private function getTopClients(Carbon $startDate, Carbon $endDate): array
     {
-        return Sale::select('client_id', DB::raw('COUNT(*) as orders'), DB::raw('SUM(total_amount) as total'))
-            ->with('client')
+        $topClients = Sale::with('client')
             ->whereBetween('created_at', [$startDate, $endDate])
-            ->where('status', 'completed')
-            ->whereNotNull('client_id')
+            ->selectRaw('client_id, COUNT(*) as orders, SUM(total_amount) as total')
             ->groupBy('client_id')
             ->orderBy('total', 'desc')
-            ->take(5)
-            ->get()
-            ->map(function ($sale) {
-                return [
-                    'name' => $sale->client ? $sale->client->name : 'Cliente não encontrado',
-                    'orders' => $sale->orders,
-                    'total' => $sale->total
-                ];
-            })
-            ->toArray();
+            ->limit(10)
+            ->get();
+
+        return $topClients->map(function ($sale) {
+            return [
+                'name' => $sale->client->name ?? 'Cliente não informado',
+                'orders' => (int) $sale->orders,
+                'total' => (float) $sale->total
+            ];
+        })->toArray();
     }
 
-    /**
-     * Despesas por categoria
-     */
     private function getExpensesByCategory(Carbon $startDate, Carbon $endDate): array
     {
-        $expenses = AccountsPayable::selectRaw('category, SUM(original_amount) as amount')
-            ->whereBetween('issue_date', [$startDate, $endDate])
+        $expenses = AccountsPayable::where('status', 'paid')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->selectRaw('category, SUM(remaining_amount) as amount')
             ->groupBy('category')
-            ->orderBy('amount', 'desc')
             ->get();
 
         $total = $expenses->sum('amount');
 
         return $expenses->map(function ($expense) use ($total) {
             return [
-                'category' => $expense->category,
-                'amount' => $expense->amount,
-                'percentage' => $total > 0 ? ($expense->amount / $total) * 100 : 0
+                'category' => $expense->category ?? 'Outros',
+                'amount' => (float) $expense->amount,
+                'percentage' => $total > 0 ? round(($expense->amount / $total) * 100, 2) : 0
             ];
         })->toArray();
     }
 
-    /**
-     * Análise de lucro
-     */
     private function getProfitAnalysis(Carbon $startDate, Carbon $endDate): array
     {
         $totalRevenue = Sale::whereBetween('created_at', [$startDate, $endDate])
-            ->where('status', 'completed')
             ->sum('total_amount');
 
-        $totalExpenses = AccountsPayable::whereBetween('issue_date', [$startDate, $endDate])
-            ->sum('original_amount');
+        $totalExpenses = AccountsPayable::where('status', 'paid')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->sum('remaining_amount');
 
-        $grossProfit = $totalRevenue;
-        $netProfit = $totalRevenue - $totalExpenses;
-        $profitMargin = $totalRevenue > 0 ? ($netProfit / $totalRevenue) * 100 : 0;
+        $grossProfit = $totalRevenue - $totalExpenses;
+        $profitMargin = $totalRevenue > 0 ? ($grossProfit / $totalRevenue) * 100 : 0;
 
         return [
-            'totalRevenue' => $totalRevenue,
-            'totalExpenses' => $totalExpenses,
-            'grossProfit' => $grossProfit,
-            'netProfit' => $netProfit,
+            'totalRevenue' => (float) $totalRevenue,
+            'totalExpenses' => (float) $totalExpenses,
+            'grossProfit' => (float) $grossProfit,
+            'netProfit' => (float) $grossProfit, // Assumindo que não há outros custos por enquanto
             'profitMargin' => round($profitMargin, 2)
         ];
     }
 
-    /**
-     * Obter datas do período
-     */
     private function getPeriodDates(string $period, ?string $startDate = null, ?string $endDate = null): array
     {
         switch ($period) {
@@ -376,38 +377,22 @@ class ReportsController extends Controller
                     'end' => now()->subYear()->endOfYear()
                 ];
             case 'custom':
+                if ($startDate && $endDate) {
+                    return [
+                        'start' => Carbon::parse($startDate)->startOfDay(),
+                        'end' => Carbon::parse($endDate)->endOfDay()
+                    ];
+                }
+                // Fallback para mês atual se datas customizadas não foram fornecidas
                 return [
-                    'start' => Carbon::parse($startDate ?? now()->startOfMonth()),
-                    'end' => Carbon::parse($endDate ?? now()->endOfMonth())
+                    'start' => now()->startOfMonth(),
+                    'end' => now()->endOfMonth()
                 ];
             default:
                 return [
                     'start' => now()->startOfMonth(),
                     'end' => now()->endOfMonth()
                 ];
-        }
-    }
-
-    /**
-     * Gerar PDF (placeholder - implementar biblioteca de PDF)
-     */
-    public function pdf(Request $request): JsonResponse
-    {
-        try {
-            // Aqui você implementaria a geração do PDF
-            // usando bibliotecas como DomPDF ou wkHTMLtoPDF
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'PDF seria gerado aqui',
-                'url' => '#'
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
-            ], 500);
         }
     }
 }

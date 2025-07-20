@@ -241,8 +241,8 @@ class AccountsPayableController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'payment_amount' => 'nullable|numeric|min:0.01',
-                'payment_date' => 'nullable|date',
+                'payment_amount' => 'required|numeric|min:0.01',
+                'payment_date' => 'required|date',
                 'discount_amount' => 'nullable|numeric|min:0',
                 'interest_amount' => 'nullable|numeric|min:0',
                 'notes' => 'nullable|string|max:1000'
@@ -256,24 +256,31 @@ class AccountsPayableController extends Controller
                 ], 422);
             }
 
-            $paymentAmount = $request->payment_amount ?? $accountsPayable->remaining_amount;
-            $paymentDate = $request->payment_date ?? now();
-            $discountAmount = $request->discount_amount ?? 0;
-            $interestAmount = $request->interest_amount ?? 0;
+            $paymentAmount = (float) $request->payment_amount;
+            $paymentDate = $request->payment_date;
+            $discountAmount = (float) ($request->discount_amount ?? 0);
+            $interestAmount = (float) ($request->interest_amount ?? 0);
+
+            // Calcular o novo valor da conta com juros e desconto
+            $accountTotalWithCharges = $accountsPayable->remaining_amount + $interestAmount - $discountAmount;
+
+            // Atualizar a conta
+            // O remaining_amount diminui pelo valor do pagamento
+            // Juros e descontos são registrados separadamente
+            $newRemainingAmount = max(0, $accountsPayable->remaining_amount - $paymentAmount);
+            $newStatus = $newRemainingAmount <= 0.01 ? 'paid' : 'partial';
 
             $accountsPayable->update([
-                'remaining_amount' => max(0, $accountsPayable->remaining_amount - $paymentAmount),
-                'status' => $paymentAmount >= $accountsPayable->remaining_amount ? 'paid' : 'partial',
+                'remaining_amount' => $newRemainingAmount,
+                'status' => $newStatus,
                 'payment_date' => $paymentDate,
-                'discount_amount' => $discountAmount,
-                'interest_amount' => $interestAmount,
-                'notes' => $request->notes ?? $accountsPayable->notes
+                'discount_amount' => ($accountsPayable->discount_amount ?? 0) + $discountAmount,
+                'interest_amount' => ($accountsPayable->interest_amount ?? 0) + $interestAmount,
+                'original_amount' => $accountsPayable->original_amount + $interestAmount - $discountAmount,
+                'notes' => $request->notes ? 
+                    ($accountsPayable->notes ? $accountsPayable->notes . "\n" . $request->notes : $request->notes) :
+                    $accountsPayable->notes
             ]);
-
-            // Se foi pago completamente, marcar como pago
-            if ($accountsPayable->remaining_amount <= 0) {
-                $accountsPayable->update(['status' => 'paid']);
-            }
 
             // Adicionar campo amount para compatibilidade com frontend
             $updatedPayable = $accountsPayable->fresh();
@@ -281,14 +288,22 @@ class AccountsPayableController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Pagamento registrado com sucesso',
-                'data' => $updatedPayable
+                'message' => $newStatus === 'paid' ? 'Conta paga com sucesso!' : 'Pagamento parcial registrado com sucesso!',
+                'data' => $updatedPayable,
+                'payment_details' => [
+                    'payment_amount' => $paymentAmount,
+                    'discount_amount' => $discountAmount,
+                    'interest_amount' => $interestAmount,
+                    'account_total_with_charges' => $accountTotalWithCharges,
+                    'remaining_amount' => $newRemainingAmount,
+                    'status' => $newStatus
+                ]
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erro ao registrar pagamento: ' . $e->getMessage()
+                'message' => 'Erro interno do servidor: ' . $e->getMessage()
             ], 500);
         }
     }
